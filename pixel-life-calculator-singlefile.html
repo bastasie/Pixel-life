@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b0b" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Pixel‑Life Calculator (Single‑File)</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin:0; height:100%; background:#070707; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    #stage { position:fixed; inset:0; overflow:hidden; }
+    #bg { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+
+    /* UI shell */
+    #ui {
+      position:absolute;
+      inset: 0;
+      display:flex;
+      flex-direction:column;
+      padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+      gap: 10px;
+      pointer-events:none; /* allow canvas to receive touches if desired; buttons re-enable */
+    }
+
+    #topbar {
+      display:flex; align-items:center; gap:10px;
+      padding: 10px 12px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(10px);
+      pointer-events:auto;
+    }
+    #title { font-weight:700; font-size:14px; opacity:0.92; }
+    #hint { margin-left:auto; font-size:12px; opacity:0.72; }
+
+    /* Display */
+    #display {
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.46);
+      backdrop-filter: blur(12px);
+      padding: 14px 14px 12px;
+      pointer-events:auto;
+    }
+    #expr {
+      font-size: 14px;
+      opacity: 0.78;
+      min-height: 18px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #value {
+      font-size: 34px;
+      font-weight: 750;
+      letter-spacing: 0.2px;
+      line-height: 1.08;
+      margin-top: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #sub {
+      margin-top: 8px;
+      display:flex;
+      gap: 10px;
+      font-size: 12px;
+      opacity: 0.72;
+    }
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.05);
+    }
+
+    /* Keypad */
+    #pad {
+      flex: 1;
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      pointer-events:auto;
+    }
+    .btn {
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.42);
+      backdrop-filter: blur(10px);
+      color: rgba(255,255,255,0.92);
+      font-weight: 750;
+      font-size: 18px;
+      padding: 18px 10px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    .btn:active { transform: translateY(1px); background: rgba(255,255,255,0.09); }
+    .btn.op { font-weight: 850; }
+    .btn.dim { opacity: 0.78; font-weight: 700; }
+    .btn.eq { font-weight: 900; }
+    .btn.wide { grid-column: span 2; }
+
+    /* Small screens */
+    @media (max-width: 380px) {
+      #value { font-size: 30px; }
+      .btn { padding: 16px 8px; border-radius: 18px; }
+      #pad { gap: 8px; }
+    }
+
+    /* Toast */
+    #toast {
+      position: absolute;
+      left: 50%;
+      bottom: calc(10px + env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(10px);
+      font-size: 12px;
+      opacity: 0;
+      transition: opacity 180ms ease;
+      pointer-events:none;
+      max-width: 88vw;
+      white-space: nowrap;
+      overflow:hidden;
+      text-overflow: ellipsis;
+    }
+    #toast.show { opacity: 0.86; }
+
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="bg"></canvas>
+
+    <div id="ui">
+      <div id="topbar">
+        <div id="title">Pixel‑Life Calculator (single HTML)</div>
+        <div id="hint">Tip: ⋮ → Add to Home screen</div>
+      </div>
+
+      <div id="display" aria-label="Calculator display">
+        <div id="expr"></div>
+        <div id="value">0</div>
+        <div id="sub">
+          <div class="pill">M: <span id="mem">0</span></div>
+          <div class="pill"><span id="mode">Normal</span></div>
+        </div>
+      </div>
+
+      <div id="pad" aria-label="Keypad">
+        <!-- Row 1 -->
+        <div class="btn dim" data-act="mc">MC</div>
+        <div class="btn dim" data-act="mr">MR</div>
+        <div class="btn dim" data-act="mplus">M+</div>
+        <div class="btn dim op" data-act="clear">C</div>
+
+        <!-- Row 2 -->
+        <div class="btn dim" data-act="mminus">M−</div>
+        <div class="btn dim" data-act="back">⌫</div>
+        <div class="btn dim" data-act="paren">( )</div>
+        <div class="btn op" data-act="op" data-val="/">÷</div>
+
+        <!-- Row 3 -->
+        <div class="btn" data-act="digit" data-val="7">7</div>
+        <div class="btn" data-act="digit" data-val="8">8</div>
+        <div class="btn" data-act="digit" data-val="9">9</div>
+        <div class="btn op" data-act="op" data-val="*">×</div>
+
+        <!-- Row 4 -->
+        <div class="btn" data-act="digit" data-val="4">4</div>
+        <div class="btn" data-act="digit" data-val="5">5</div>
+        <div class="btn" data-act="digit" data-val="6">6</div>
+        <div class="btn op" data-act="op" data-val="-">−</div>
+
+        <!-- Row 5 -->
+        <div class="btn" data-act="digit" data-val="1">1</div>
+        <div class="btn" data-act="digit" data-val="2">2</div>
+        <div class="btn" data-act="digit" data-val="3">3</div>
+        <div class="btn op" data-act="op" data-val="+">+</div>
+
+        <!-- Row 6 -->
+        <div class="btn wide" data-act="digit" data-val="0">0</div>
+        <div class="btn" data-act="dot">.</div>
+        <div class="btn op eq" data-act="eq">=</div>
+
+        <!-- Row 7 (extras) -->
+        <div class="btn dim" data-act="sign">±</div>
+        <div class="btn dim" data-act="percent">%</div>
+        <div class="btn dim" data-act="copy">Copy</div>
+        <div class="btn dim" data-act="paste">Paste</div>
+      </div>
+    </div>
+
+    <div id="toast"></div>
+  </div>
+
+<script>
+(() => {
+  // ---------------------------------------
+  // Pixel‑Life background (reaction‑diffusion RGB)
+  // ---------------------------------------
+  const bg = document.getElementById("bg");
+  const g = bg.getContext("2d", { alpha: false });
+
+  function resizeCanvas() {
+    const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+    const rect = bg.getBoundingClientRect();
+    bg.width = Math.floor(rect.width * dpr);
+    bg.height = Math.floor(rect.height * dpr);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", resizeCanvas, { passive: true });
+  resizeCanvas();
+
+  // Chemistry lattice size (small for speed; scaled up)
+  let H = 56, W = 34;
+  const size = () => H * W;
+  const idx = (r,c) => (r * W + c);
+  const clamp01 = v => (v < 0 ? 0 : (v > 1 ? 1 : v));
+
+  let C = new Float32Array(size() * 3);
+  let C0 = new Float32Array(size() * 3);
+  let Cn = new Float32Array(size() * 3);
+
+  function rand01() { return Math.random(); }
+  function initChem() {
+    for (let r=0; r<H; r++) for (let c=0; c<W; c++) {
+      const p = idx(r,c) * 3;
+      const base = 0.05 + 0.10 * rand01();
+      C[p+0] = base + 0.20 * rand01();
+      C[p+1] = base + 0.20 * rand01();
+      C[p+2] = base + 0.20 * rand01();
+
+      // homeostasis: soft dark palette
+      C0[p+0] = 0.07 + 0.07 * rand01();
+      C0[p+1] = 0.07 + 0.07 * rand01();
+      C0[p+2] = 0.07 + 0.07 * rand01();
+    }
+  }
+
+  const chem = {
+    dt: 0.28,
+    k1: 0.55, k2: 0.48, k3: 0.52,
+    gamma: 0.12,
+    beta: 0.028,
+    kappa: 0.016,
+    alpha: 0.014,
+    mLoop: 80,
+    // energy injection from user taps (turns the bg into an "input field")
+    tapBoost: 0.45,
+    tapRadius: 3.6,
+  };
+
+  function phaseWeight(t, m) {
+    return 0.5 * (1 - Math.cos(2*Math.PI * (t % m) / m));
+  }
+
+  let tick = 0;
+  let tap = null; // {r,c,until}
+
+  function stepChem() {
+    const dt = chem.dt;
+    const wph = phaseWeight(tick, chem.mLoop);
+
+    for (let r=0; r<H; r++) for (let c=0; c<W; c++) {
+      const p = idx(r,c), p3 = p*3;
+      const up = idx((r-1+H)%H, c), dn = idx((r+1)%H, c);
+      const lf = idx(r, (c-1+W)%W), rt = idx(r, (c+1)%W);
+
+      const up3 = up*3, dn3 = dn*3, lf3 = lf*3, rt3 = rt*3;
+
+      const R = C[p3+0], Gc = C[p3+1], B = C[p3+2];
+
+      // Laplacian (4-neighborhood)
+      const lapR = (C[up3+0] + C[dn3+0] + C[lf3+0] + C[rt3+0] - 4*R);
+      const lapG = (C[up3+1] + C[dn3+1] + C[lf3+1] + C[rt3+1] - 4*Gc);
+      const lapB = (C[up3+2] + C[dn3+2] + C[lf3+2] + C[rt3+2] - 4*B);
+
+      // RGB cycle
+      let dR = -chem.k1 * R + chem.k3 * B;
+      let dG =  chem.k1 * R - chem.k2 * Gc;
+      let dB =  chem.k2 * Gc - chem.k3 * B;
+
+      // mild autocatalysis
+      dR += chem.alpha * R * (1 - R);
+      dG += chem.alpha * Gc * (1 - Gc);
+      dB += chem.alpha * B * (1 - B);
+
+      // diffusion
+      dR += chem.gamma * lapR;
+      dG += chem.gamma * lapG;
+      dB += chem.gamma * lapB;
+
+      // feedback toward C0 (homeostasis + loop pull)
+      dR += -chem.beta * (R  - C0[p3+0]) - chem.kappa * wph * (R  - C0[p3+0]);
+      dG += -chem.beta * (Gc - C0[p3+1]) - chem.kappa * wph * (Gc - C0[p3+1]);
+      dB += -chem.beta * (B  - C0[p3+2]) - chem.kappa * wph * (B  - C0[p3+2]);
+
+      // Tap energy injection (temporary hotspot)
+      if (tap && tick < tap.until) {
+        const dr = r - tap.r, dc = c - tap.c;
+        const d2 = dr*dr + dc*dc;
+        const rad2 = chem.tapRadius * chem.tapRadius;
+        if (d2 <= rad2) {
+          const k = chem.tapBoost * (1 - d2 / rad2);
+          dR += k * (0.92 - R);
+          dG += k * (0.35 - Gc);
+          dB += k * (0.80 - B);
+        }
+      }
+
+      Cn[p3+0] = clamp01(R  + dt * dR);
+      Cn[p3+1] = clamp01(Gc + dt * dG);
+      Cn[p3+2] = clamp01(B  + dt * dB);
+    }
+
+    // swap
+    const tmp = C; C = Cn; Cn = tmp;
+    tick++;
+  }
+
+  function drawChem() {
+    const rect = bg.getBoundingClientRect();
+    // scale lattice cells to cover canvas
+    const cw = rect.width / W;
+    const ch = rect.height / H;
+    const s = Math.max(4, Math.floor(Math.min(cw, ch)));
+    const ox = Math.floor((rect.width - W*s) / 2);
+    const oy = Math.floor((rect.height - H*s) / 2);
+
+    // paint
+    g.fillStyle = "#000";
+    g.fillRect(0,0,rect.width,rect.height);
+
+    for (let r=0; r<H; r++) {
+      for (let c=0; c<W; c++) {
+        const p3 = idx(r,c)*3;
+        const R = C[p3+0], Gc = C[p3+1], B = C[p3+2];
+        const rr = (R*255)|0, gg = (Gc*255)|0, bb = (B*255)|0;
+        g.fillStyle = `rgb(${rr},${gg},${bb})`;
+        g.fillRect(ox + c*s, oy + r*s, s, s);
+      }
+    }
+  }
+
+  function anim() {
+    // run multiple chem steps per frame for richer motion
+    for (let i=0; i<2; i++) stepChem();
+    drawChem();
+    requestAnimationFrame(anim);
+  }
+
+  initChem();
+  requestAnimationFrame(anim);
+
+  // Map screen tap to lattice coordinate for background injection
+  bg.addEventListener("pointerdown", (e) => {
+    const rect = bg.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // approximate mapping into centered grid
+    const cw = rect.width / W;
+    const ch = rect.height / H;
+    const s = Math.max(4, Math.floor(Math.min(cw, ch)));
+    const ox = Math.floor((rect.width - W*s) / 2);
+    const oy = Math.floor((rect.height - H*s) / 2);
+
+    const c = Math.floor((x - ox) / s);
+    const r = Math.floor((y - oy) / s);
+    if (r>=0 && r<H && c>=0 && c<W) {
+      tap = { r, c, until: tick + 30 };
+    }
+  }, { passive: true });
+
+  // ---------------------------------------
+  // Calculator core (safe parser, no eval)
+  // ---------------------------------------
+  const elExpr = document.getElementById("expr");
+  const elVal  = document.getElementById("value");
+  const elMem  = document.getElementById("mem");
+  const elMode = document.getElementById("mode");
+  const toast  = document.getElementById("toast");
+
+  let mem = 0;
+  let expr = "";     // expression string
+  let entry = "0";   // current entry text (what user is typing)
+  let justEvaluated = false;
+  let lastAnswer = 0;
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add("show");
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => toast.classList.remove("show"), 900);
+  }
+
+  function fmt(n) {
+    if (!Number.isFinite(n)) return "Error";
+    // Keep it readable on phones: 12 significant digits, trim zeros.
+    const s = n.toPrecision(12);
+    // Avoid scientific unless needed
+    const num = Number(s);
+    let out = String(num);
+    if (out.includes("e")) return out;
+    // trim trailing zeros
+    if (out.includes(".")) out = out.replace(/\.?0+$/,"");
+    return out;
+  }
+
+  function updateUI() {
+    elExpr.textContent = expr;
+    elVal.textContent = entry;
+    elMem.textContent = fmt(mem);
+    elMode.textContent = justEvaluated ? "Result" : "Normal";
+  }
+
+  // Tokenize into numbers/operators/parentheses
+  function tokenize(s) {
+    const tokens = [];
+    let i = 0;
+    while (i < s.length) {
+      const ch = s[i];
+      if (ch === " " || ch === "\t" || ch === "\n") { i++; continue; }
+
+      if (ch === "(" || ch === ")") {
+        tokens.push({ t: "paren", v: ch });
+        i++; continue;
+      }
+
+      // operators
+      if (ch === "+" || ch === "-" || ch === "*" || ch === "/" ) {
+        tokens.push({ t: "op", v: ch });
+        i++; continue;
+      }
+
+      // number (supports decimals)
+      if ((ch >= "0" && ch <= "9") || ch === ".") {
+        let j = i;
+        while (j < s.length && ((s[j] >= "0" && s[j] <= "9") || s[j] === ".")) j++;
+        const numStr = s.slice(i, j);
+        if (!/^\d*\.?\d+$/.test(numStr)) throw new Error("Bad number");
+        tokens.push({ t: "num", v: parseFloat(numStr) });
+        i = j; continue;
+      }
+
+      throw new Error("Bad token");
+    }
+    return tokens;
+  }
+
+  function precedence(op) {
+    if (op === "+" || op === "-") return 1;
+    if (op === "*" || op === "/") return 2;
+    return 0;
+  }
+
+  // Shunting-yard -> RPN with unary minus support
+  function toRPN(tokens) {
+    const out = [];
+    const ops = [];
+
+    let prev = null; // previous token type
+    for (const tok of tokens) {
+      if (tok.t === "num") {
+        out.push(tok);
+        prev = "num";
+      } else if (tok.t === "paren") {
+        if (tok.v === "(") {
+          ops.push(tok);
+          prev = "(";
+        } else {
+          while (ops.length && !(ops[ops.length-1].t === "paren" && ops[ops.length-1].v === "(")) {
+            out.push(ops.pop());
+          }
+          if (!ops.length) throw new Error("Mismatched parens");
+          ops.pop(); // pop "("
+          prev = ")";
+        }
+      } else if (tok.t === "op") {
+        // unary minus: if "-" and at start or after "(" or after another op
+        let op = tok.v;
+        if (op === "-" && (prev === null || prev === "(" || prev === "op")) {
+          // represent unary minus as "u-"
+          op = "u-";
+        }
+
+        const oTok = { t: "op", v: op };
+
+        while (ops.length) {
+          const top = ops[ops.length-1];
+          if (top.t !== "op") break;
+
+          const p1 = (oTok.v === "u-") ? 3 : precedence(oTok.v);
+          const p2 = (top.v === "u-") ? 3 : precedence(top.v);
+
+          // unary minus is right-associative; others left
+          const leftAssoc = (oTok.v !== "u-");
+          if (p2 > p1 || (leftAssoc && p2 === p1)) out.push(ops.pop());
+          else break;
+        }
+        ops.push(oTok);
+        prev = "op";
+      }
+    }
+
+    while (ops.length) {
+      const top = ops.pop();
+      if (top.t === "paren") throw new Error("Mismatched parens");
+      out.push(top);
+    }
+    return out;
+  }
+
+  function evalRPN(rpn) {
+    const st = [];
+    for (const tok of rpn) {
+      if (tok.t === "num") st.push(tok.v);
+      else if (tok.t === "op") {
+        if (tok.v === "u-") {
+          if (st.length < 1) throw new Error("Bad expr");
+          st.push(-st.pop());
+        } else {
+          if (st.length < 2) throw new Error("Bad expr");
+          const b = st.pop(), a = st.pop();
+          let v = 0;
+          if (tok.v === "+") v = a + b;
+          else if (tok.v === "-") v = a - b;
+          else if (tok.v === "*") v = a * b;
+          else if (tok.v === "/") v = a / b;
+          st.push(v);
+        }
+      }
+    }
+    if (st.length !== 1) throw new Error("Bad expr");
+    return st[0];
+  }
+
+  function evaluateExpression(s) {
+    // percent handling: convert "x%" into "(x/100)" but only when % appears at end of a number or ")"
+    // We'll pre-process a simple postfix percent.
+    let t = s.replace(/\s+/g,"");
+    // Replace occurrences like "12%" or ")%" with "/100"
+    // Example: "50%" => "(50/100)"
+    //          "(2+3)%" => "((2+3)/100)"
+    t = t.replace(/(\d+(\.\d+)?|\))%/g, (m) => {
+      if (m.endsWith("%") && m !== "%") {
+        const core = m.slice(0, -1);
+        return `(${core}/100)`;
+      }
+      return m;
+    });
+
+    const tokens = tokenize(t);
+    const rpn = toRPN(tokens);
+    return evalRPN(rpn);
+  }
+
+  function commitEntry() {
+    // append entry to expr with appropriate spacing
+    if (justEvaluated) {
+      // starting a new expression after result
+      expr = "";
+      justEvaluated = false;
+    }
+    if (entry === "Error") entry = "0";
+    if (expr.length === 0) expr = entry;
+    else expr += entry;
+  }
+
+  function ensureExprReadyForNumber() {
+    if (justEvaluated) {
+      // typing a number after result starts fresh
+      expr = "";
+      justEvaluated = false;
+      entry = "0";
+    }
+  }
+
+  function pushDigit(d) {
+    ensureExprReadyForNumber();
+    if (entry === "0") entry = d;
+    else entry += d;
+  }
+
+  function pushDot() {
+    ensureExprReadyForNumber();
+    if (!entry.includes(".")) entry += (entry === "" ? "0." : ".");
+  }
+
+  function pushOp(op) {
+    // If we just evaluated and user hits an operator, continue from answer.
+    if (justEvaluated) {
+      expr = String(lastAnswer);
+      justEvaluated = false;
+    } else {
+      // commit entry into expr if expr empty or ends with operator/paren?
+      if (expr.length === 0) {
+        expr = entry;
+      } else {
+        // If expr ends with a number or ')', we are okay.
+        // If it ends with an operator, replace it.
+      }
+    }
+
+    // Ensure expr currently represents something; if user was typing entry and expr doesn't already include it, merge smartly.
+    // We keep expr as the "full expression" shown above; entry is the current number being edited when expr ends in operator.
+    // Strategy:
+    // - If expr ends with digit or ')': append operator.
+    // - Else if expr ends with operator: replace operator.
+    // - Else: append.
+    const last = expr.slice(-1);
+    if ("+-*/".includes(last)) expr = expr.slice(0,-1) + op;
+    else expr += op;
+
+    entry = "0";
+  }
+
+  function toggleSign() {
+    if (entry === "0" || entry === "0.") return;
+    if (entry.startsWith("-")) entry = entry.slice(1);
+    else entry = "-" + entry;
+  }
+
+  function backspace() {
+    if (justEvaluated) { /* treat as clear entry */ entry = "0"; justEvaluated = false; expr = ""; return; }
+    if (entry.length <= 1 || (entry.length === 2 && entry.startsWith("-"))) entry = "0";
+    else entry = entry.slice(0, -1);
+  }
+
+  function clearAll() {
+    expr = "";
+    entry = "0";
+    justEvaluated = false;
+  }
+
+  function smartParen() {
+    // Toggle between "(" and ")" depending on balance and context
+    if (justEvaluated) {
+      expr = "";
+      justEvaluated = false;
+      entry = "0";
+    }
+    const e = expr;
+    const open = (e.match(/\(/g) || []).length;
+    const close = (e.match(/\)/g) || []).length;
+    const last = e.slice(-1);
+
+    // If last is empty or operator or "(", then add "("
+    if (e.length === 0 || "+-*/(".includes(last)) {
+      expr += "(";
+      entry = "0";
+      return;
+    }
+
+    // If we can close, close; else open
+    if (open > close && (/\d|\)/.test(last))) expr += ")";
+    else expr += "(";
+
+    entry = "0";
+  }
+
+  function percent() {
+    // postfix percent on current entry (entry -> entry/100)
+    const n = Number(entry);
+    if (!Number.isFinite(n)) { entry = "Error"; return; }
+    entry = fmt(n / 100);
+  }
+
+  function equals() {
+    // Build full expression: if expr ends in operator, append entry; else if expr empty, just entry.
+    let full = "";
+    if (expr.length === 0) full = entry;
+    else {
+      const last = expr.slice(-1);
+      if ("+-*/".includes(last) || last === "(") full = expr + entry;
+      else full = expr; // expr already complete
+    }
+
+    try {
+      const val = evaluateExpression(full);
+      lastAnswer = val;
+      entry = fmt(val);
+      expr = full + " =";
+      justEvaluated = true;
+      // background tap pulse (subtle feedback)
+      tap = { r: Math.floor(H*0.55), c: Math.floor(W*0.5), until: tick + 24 };
+    } catch (e) {
+      entry = "Error";
+      expr = full;
+      justEvaluated = true;
+      showToast("Invalid expression");
+      tap = { r: Math.floor(H*0.5), c: Math.floor(W*0.5), until: tick + 18 };
+    }
+  }
+
+  function memClear() { mem = 0; showToast("Memory cleared"); }
+  function memRecall() { entry = fmt(mem); showToast("Memory recalled"); }
+  function memPlus() {
+    const n = Number(entry);
+    if (!Number.isFinite(n)) { showToast("Can't add Error"); return; }
+    mem += n;
+    showToast("Added to memory");
+  }
+  function memMinus() {
+    const n = Number(entry);
+    if (!Number.isFinite(n)) { showToast("Can't subtract Error"); return; }
+    mem -= n;
+    showToast("Subtracted from memory");
+  }
+
+  async function copyValue() {
+    try {
+      await navigator.clipboard.writeText(entry);
+      showToast("Copied");
+    } catch {
+      showToast("Copy blocked by browser");
+    }
+  }
+  async function pasteValue() {
+    try {
+      const t = await navigator.clipboard.readText();
+      const clean = (t || "").trim();
+      if (!clean) return;
+      if (!/^-?\d+(\.\d+)?$/.test(clean)) { showToast("Paste a number"); return; }
+      entry = clean;
+      showToast("Pasted");
+    } catch {
+      showToast("Paste blocked by browser");
+    }
+  }
+
+  // Button handling
+  const pad = document.getElementById("pad");
+  pad.addEventListener("click", (e) => {
+    const b = e.target.closest(".btn");
+    if (!b) return;
+    const act = b.getAttribute("data-act");
+    const val = b.getAttribute("data-val");
+
+    // small background pulse on any button press
+    tap = { r: Math.floor(H*0.30), c: Math.floor(W*0.75), until: tick + 14 };
+
+    if (act === "digit") pushDigit(val);
+    else if (act === "dot") pushDot();
+    else if (act === "op") pushOp(val);
+    else if (act === "eq") equals();
+    else if (act === "clear") clearAll();
+    else if (act === "back") backspace();
+    else if (act === "sign") toggleSign();
+    else if (act === "percent") percent();
+    else if (act === "paren") smartParen();
+    else if (act === "mc") memClear();
+    else if (act === "mr") memRecall();
+    else if (act === "mplus") memPlus();
+    else if (act === "mminus") memMinus();
+    else if (act === "copy") copyValue();
+    else if (act === "paste") pasteValue();
+
+    updateUI();
+  });
+
+  // Keyboard support (handy if you use a BT keyboard)
+  window.addEventListener("keydown", (e) => {
+    const k = e.key;
+    if (k >= "0" && k <= "9") pushDigit(k);
+    else if (k === ".") pushDot();
+    else if (k === "+" || k === "-" || k === "*" || k === "/") pushOp(k);
+    else if (k === "Enter" || k === "=") equals();
+    else if (k === "Backspace") backspace();
+    else if (k === "Escape") clearAll();
+    else if (k === "(" || k === ")") { expr += k; entry = "0"; }
+    updateUI();
+  }, { passive: true });
+
+  updateUI();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,957 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b0b" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Pixel-Life QR (Text → QR, Single-File)</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin:0; height:100%; background:#070707; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    #stage { position:fixed; inset:0; overflow:hidden; }
+    #bg { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+
+    #ui {
+      position:absolute;
+      inset:0;
+      padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+
+    .bar {
+      display:flex; align-items:center; gap:10px;
+      padding: 10px 12px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(10px);
+    }
+    #title { font-weight:800; font-size:14px; opacity:0.92; }
+    #sub { margin-left:auto; font-size:12px; opacity:0.72; }
+
+    .card {
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.46);
+      backdrop-filter: blur(12px);
+      padding: 12px;
+    }
+
+    #row {
+      display:flex;
+      gap: 12px;
+      flex: 1;
+      min-height: 0;
+    }
+    #left, #right { flex: 1; min-width: 0; display:flex; flex-direction:column; gap:10px; }
+    #right { align-items:center; justify-content:center; }
+
+    label { font-size:12px; opacity:0.78; }
+    textarea {
+      width:100%;
+      min-height: 110px;
+      resize: none;
+      border-radius: 16px;
+      padding: 10px 10px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
+      color: rgba(255,255,255,0.92);
+      outline: none;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+    textarea:focus { border-color: rgba(255,255,255,0.22); }
+
+    .controls {
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .controls3 {
+      display:grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+    button, select, input[type="number"] {
+      appearance:none;
+      border:1px solid rgba(255,255,255,0.14);
+      background: rgba(0,0,0,0.42);
+      backdrop-filter: blur(10px);
+      color: rgba(255,255,255,0.92);
+      padding: 10px 10px;
+      border-radius: 16px;
+      font-weight: 750;
+      font-size: 13px;
+    }
+    button:active { transform: translateY(1px); background: rgba(255,255,255,0.09); }
+    select { font-weight: 700; }
+    input[type="number"] { font-weight: 800; width: 100%; box-sizing: border-box; }
+
+    #qrWrap {
+      width: min(78vw, 380px);
+      max-width: 420px;
+      aspect-ratio: 1 / 1;
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(12px);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 12px;
+    }
+    #qr {
+      width: 100%;
+      height: 100%;
+      image-rendering: pixelated;
+      border-radius: 14px;
+      background: #fff;
+    }
+
+    #meta {
+      display:flex;
+      gap:10px;
+      justify-content:space-between;
+      width: min(78vw, 380px);
+      max-width: 420px;
+      font-size: 12px;
+      opacity: 0.78;
+    }
+    .pill {
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.05);
+      white-space: nowrap;
+      overflow:hidden;
+      text-overflow: ellipsis;
+      max-width: 60%;
+    }
+
+    #toast {
+      position: absolute;
+      left: 50%;
+      bottom: calc(10px + env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(10px);
+      font-size: 12px;
+      opacity: 0;
+      transition: opacity 180ms ease;
+      pointer-events:none;
+      max-width: 90vw;
+      white-space: nowrap;
+      overflow:hidden;
+      text-overflow: ellipsis;
+    }
+    #toast.show { opacity: 0.86; }
+
+    @media (max-width: 860px) {
+      #row { flex-direction: column; }
+      #qrWrap { width: min(92vw, 420px); }
+      #meta { width: min(92vw, 420px); }
+    }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="bg"></canvas>
+
+    <div id="ui">
+      <div class="bar">
+        <div id="title">Pixel-Life QR (Text → QR)</div>
+        <div id="sub">Chrome ⋮ → Add to Home screen</div>
+      </div>
+
+      <div id="row">
+        <div id="left">
+          <div class="card">
+            <label for="txt">Text / URL</label>
+            <textarea id="txt" spellcheck="false" placeholder="Paste text or a URL…"></textarea>
+          </div>
+
+          <div class="card">
+            <div class="controls3" style="margin-bottom:10px;">
+              <div>
+                <label>Error correction</label><br/>
+                <select id="ec">
+                  <option value="L">L (7%)</option>
+                  <option value="M" selected>M (15%)</option>
+                  <option value="Q">Q (25%)</option>
+                  <option value="H">H (30%)</option>
+                </select>
+              </div>
+              <div>
+                <label>Module size</label><br/>
+                <input id="ms" type="number" min="3" max="18" step="1" value="8" />
+              </div>
+              <div>
+                <label>Margin (modules)</label><br/>
+                <input id="mg" type="number" min="0" max="12" step="1" value="4" />
+              </div>
+            </div>
+
+            <div class="controls">
+              <button id="btnGen">Generate</button>
+              <button id="btnClear">Clear</button>
+              <button id="btnCopyText">Copy text</button>
+              <button id="btnCopyPNG">Copy QR as PNG</button>
+              <button id="btnSave">Download PNG</button>
+              <button id="btnShare">Share…</button>
+            </div>
+          </div>
+
+          <div class="card" style="opacity:0.86; font-size:12px; line-height:1.35;">
+            <b>Notes</b><br/>
+            • Works offline once loaded (single file).<br/>
+            • QR is generated locally in the browser (no network calls).<br/>
+            • Tap the background to “pulse” the Pixel-Life field.
+          </div>
+        </div>
+
+        <div id="right">
+          <div id="qrWrap">
+            <canvas id="qr"></canvas>
+          </div>
+          <div id="meta">
+            <div class="pill">Size: <span id="qrSize">—</span></div>
+            <div class="pill">Chars: <span id="chars">0</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="toast"></div>
+    </div>
+  </div>
+
+<script>
+/*
+  Single-file QR generator + Pixel-Life animated background.
+
+  QR generation code below is based on the widely used "qrcode-generator" approach (Model 2),
+  re-implemented inline (no external files) to keep this as a single HTML file.
+*/
+
+// -----------------------------
+// Pixel-Life animated background
+// -----------------------------
+(() => {
+  const bg = document.getElementById("bg");
+  const g = bg.getContext("2d", { alpha: false });
+
+  function resizeCanvas() {
+    const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+    const rect = bg.getBoundingClientRect();
+    bg.width = Math.floor(rect.width * dpr);
+    bg.height = Math.floor(rect.height * dpr);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", resizeCanvas, { passive: true });
+  resizeCanvas();
+
+  let H = 56, W = 34;
+  const size = () => H*W;
+  const idx = (r,c) => (r*W + c);
+  const clamp01 = v => (v < 0 ? 0 : (v > 1 ? 1 : v));
+  let C = new Float32Array(size()*3);
+  let C0 = new Float32Array(size()*3);
+  let Cn = new Float32Array(size()*3);
+  const rand01 = () => Math.random();
+
+  function initChem() {
+    for (let r=0; r<H; r++) for (let c=0; c<W; c++) {
+      const p = idx(r,c)*3;
+      const base = 0.05 + 0.10*rand01();
+      C[p+0] = base + 0.20*rand01();
+      C[p+1] = base + 0.20*rand01();
+      C[p+2] = base + 0.20*rand01();
+
+      C0[p+0] = 0.07 + 0.07*rand01();
+      C0[p+1] = 0.07 + 0.07*rand01();
+      C0[p+2] = 0.07 + 0.07*rand01();
+    }
+  }
+
+  const chem = {
+    dt: 0.28,
+    k1: 0.55, k2: 0.48, k3: 0.52,
+    gamma: 0.12,
+    beta: 0.028,
+    kappa: 0.016,
+    alpha: 0.014,
+    mLoop: 80,
+    tapBoost: 0.50,
+    tapRadius: 3.8
+  };
+
+  function phaseWeight(t, m) {
+    return 0.5 * (1 - Math.cos(2*Math.PI*(t % m)/m));
+  }
+
+  let tick = 0;
+  let tap = null; // {r,c,until}
+
+  function stepChem() {
+    const dt = chem.dt;
+    const wph = phaseWeight(tick, chem.mLoop);
+
+    for (let r=0; r<H; r++) for (let c=0; c<W; c++) {
+      const p = idx(r,c), p3 = p*3;
+      const up = idx((r-1+H)%H, c), dn = idx((r+1)%H, c);
+      const lf = idx(r, (c-1+W)%W), rt = idx(r, (c+1)%W);
+
+      const up3=up*3, dn3=dn*3, lf3=lf*3, rt3=rt*3;
+      const R=C[p3+0], Gc=C[p3+1], B=C[p3+2];
+
+      const lapR = (C[up3+0]+C[dn3+0]+C[lf3+0]+C[rt3+0]-4*R);
+      const lapG = (C[up3+1]+C[dn3+1]+C[lf3+1]+C[rt3+1]-4*Gc);
+      const lapB = (C[up3+2]+C[dn3+2]+C[lf3+2]+C[rt3+2]-4*B);
+
+      let dR = -chem.k1*R + chem.k3*B;
+      let dG =  chem.k1*R - chem.k2*Gc;
+      let dB =  chem.k2*Gc - chem.k3*B;
+
+      dR += chem.alpha * R  * (1-R);
+      dG += chem.alpha * Gc * (1-Gc);
+      dB += chem.alpha * B  * (1-B);
+
+      dR += chem.gamma*lapR;
+      dG += chem.gamma*lapG;
+      dB += chem.gamma*lapB;
+
+      dR += -chem.beta*(R - C0[p3+0]) - chem.kappa*wph*(R - C0[p3+0]);
+      dG += -chem.beta*(Gc- C0[p3+1]) - chem.kappa*wph*(Gc- C0[p3+1]);
+      dB += -chem.beta*(B - C0[p3+2]) - chem.kappa*wph*(B - C0[p3+2]);
+
+      if (tap && tick < tap.until) {
+        const dr=r-tap.r, dc=c-tap.c;
+        const d2=dr*dr+dc*dc;
+        const rad2=chem.tapRadius*chem.tapRadius;
+        if (d2 <= rad2) {
+          const k = chem.tapBoost*(1 - d2/rad2);
+          dR += k*(0.92 - R);
+          dG += k*(0.35 - Gc);
+          dB += k*(0.80 - B);
+        }
+      }
+
+      Cn[p3+0]=clamp01(R  + dt*dR);
+      Cn[p3+1]=clamp01(Gc + dt*dG);
+      Cn[p3+2]=clamp01(B  + dt*dB);
+    }
+
+    const tmp=C; C=Cn; Cn=tmp;
+    tick++;
+  }
+
+  function drawChem() {
+    const rect = bg.getBoundingClientRect();
+    const cw = rect.width / W;
+    const ch = rect.height / H;
+    const s = Math.max(4, Math.floor(Math.min(cw, ch)));
+    const ox = Math.floor((rect.width - W*s)/2);
+    const oy = Math.floor((rect.height - H*s)/2);
+
+    g.fillStyle="#000";
+    g.fillRect(0,0,rect.width,rect.height);
+
+    for (let r=0; r<H; r++) for (let c=0; c<W; c++) {
+      const p3 = idx(r,c)*3;
+      const rr=(C[p3+0]*255)|0, gg=(C[p3+1]*255)|0, bb=(C[p3+2]*255)|0;
+      g.fillStyle=`rgb(${rr},${gg},${bb})`;
+      g.fillRect(ox+c*s, oy+r*s, s, s);
+    }
+  }
+
+  function anim() {
+    for (let i=0;i<2;i++) stepChem();
+    drawChem();
+    requestAnimationFrame(anim);
+  }
+
+  initChem();
+  requestAnimationFrame(anim);
+
+  bg.addEventListener("pointerdown", (e) => {
+    const rect = bg.getBoundingClientRect();
+    const x = e.clientX - rect.left, y = e.clientY - rect.top;
+    const cw = rect.width / W;
+    const ch = rect.height / H;
+    const s = Math.max(4, Math.floor(Math.min(cw, ch)));
+    const ox = Math.floor((rect.width - W*s)/2);
+    const oy = Math.floor((rect.height - H*s)/2);
+
+    const c = Math.floor((x - ox)/s);
+    const r = Math.floor((y - oy)/s);
+    if (r>=0 && r<H && c>=0 && c<W) tap = { r, c, until: tick + 30 };
+  }, { passive:true });
+
+})();
+
+// -----------------------------
+// Minimal QR generator (byte mode)
+// -----------------------------
+const QR = (() => {
+  // Galois field / Reed-Solomon tables
+  const EXP = new Array(512).fill(0);
+  const LOG = new Array(256).fill(0);
+  (function initGF() {
+    let x = 1;
+    for (let i=0; i<255; i++) {
+      EXP[i] = x;
+      LOG[x] = i;
+      x <<= 1;
+      if (x & 0x100) x ^= 0x11d;
+    }
+    for (let i=255; i<512; i++) EXP[i] = EXP[i-255];
+  })();
+  function gfMul(a,b) {
+    if (a===0 || b===0) return 0;
+    return EXP[LOG[a] + LOG[b]];
+  }
+
+  // Generate RS generator polynomial of given degree
+  function rsGenPoly(deg) {
+    let poly = [1];
+    for (let i=0; i<deg; i++) {
+      poly = polyMul(poly, [1, EXP[i]]);
+    }
+    return poly;
+  }
+  function polyMul(p,q) {
+    const out = new Array(p.length + q.length - 1).fill(0);
+    for (let i=0; i<p.length; i++) for (let j=0; j<q.length; j++) {
+      out[i+j] ^= gfMul(p[i], q[j]);
+    }
+    return out;
+  }
+
+  function rsComputeECC(data, eccLen) {
+    const gen = rsGenPoly(eccLen);
+    const msg = data.slice();
+    msg.push(...new Array(eccLen).fill(0));
+    for (let i=0; i<data.length; i++) {
+      const coef = msg[i];
+      if (coef !== 0) {
+        for (let j=0; j<gen.length; j++) {
+          msg[i+j] ^= gfMul(gen[j], coef);
+        }
+      }
+    }
+    return msg.slice(msg.length - eccLen);
+  }
+
+  // Version -> size
+  function sizeForVersion(v) { return 17 + 4*v; }
+
+  // Capacity table for Byte mode (approx) for EC levels at low versions.
+  // To keep this single-file and reliable, we implement versions 1..10 only.
+  // Each entry: [totalDataCodewords, eccCodewordsPerBlock, numBlocks]
+  // Source values correspond to QR Model 2 standard tables.
+  const CAP = {
+    // version: {L:[data,ecc,blocks], M:[...], Q:[...], H:[...]}
+    1: { L:[19,7,1],  M:[16,10,1], Q:[13,13,1], H:[9,17,1] },
+    2: { L:[34,10,1], M:[28,16,1], Q:[22,22,1], H:[16,28,1] },
+    3: { L:[55,15,1], M:[44,26,1], Q:[34,18,2], H:[26,22,2] },
+    4: { L:[80,20,1], M:[64,18,2], Q:[48,26,2], H:[36,16,4] },
+    5: { L:[108,26,1],M:[86,24,2], Q:[62,18,4], H:[46,22,4] },
+    6: { L:[136,18,2],M:[108,16,4],Q:[76,24,4], H:[60,28,4] },
+    7: { L:[156,20,2],M:[124,18,4],Q:[88,18,6], H:[66,26,6] },
+    8: { L:[194,24,2],M:[154,22,4],Q:[110,22,6],H:[86,26,6] },
+    9: { L:[232,30,2],M:[182,22,5],Q:[132,20,8],H:[100,24,8] },
+    10:{ L:[274,18,4],M:[216,26,5],Q:[154,24,8],H:[122,28,8] }
+  };
+
+  // Format info bits
+  const EC_BITS = { L:1, M:0, Q:3, H:2 };
+  const FORMAT_MASK = 0x5412;
+
+  function bchFormat(ecLevel, mask) {
+    let data = (EC_BITS[ecLevel] << 3) | mask; // 5 bits
+    let v = data << 10;
+    const poly = 0x537;
+    for (let i=14; i>=10; i--) {
+      if ((v >> i) & 1) v ^= poly << (i-10);
+    }
+    const bits = ((data << 10) | (v & 0x3ff)) ^ FORMAT_MASK;
+    return bits & 0x7fff;
+  }
+
+  // Alignment pattern locations (versions 1..10)
+  function alignLocs(v) {
+    if (v === 1) return [];
+    const table = {
+      2:[6,18], 3:[6,22], 4:[6,26], 5:[6,30], 6:[6,34],
+      7:[6,22,38], 8:[6,24,42], 9:[6,26,46], 10:[6,28,50]
+    };
+    return table[v] || [];
+  }
+
+  // Build base matrix with finder/timing/alignment patterns; return {m, isFunc}
+  function makeBase(v) {
+    const n = sizeForVersion(v);
+    const m = Array.from({length:n}, () => new Array(n).fill(null)); // null=unset
+    const isFunc = Array.from({length:n}, () => new Array(n).fill(false));
+
+    function set(x,y,val,func=true) { m[y][x]=val; if (func) isFunc[y][x]=true; }
+
+    function addFinder(x,y) {
+      for (let dy=-1; dy<=7; dy++) for (let dx=-1; dx<=7; dx++) {
+        const xx=x+dx, yy=y+dy;
+        if (xx<0||yy<0||xx>=n||yy>=n) continue;
+        const inside = (dx>=0&&dx<=6&&dy>=0&&dy<=6);
+        let val = 0;
+        if (inside) {
+          const onBorder = (dx===0||dx===6||dy===0||dy===6);
+          const onCenter = (dx>=2&&dx<=4&&dy>=2&&dy<=4);
+          val = (onBorder || onCenter) ? 1 : 0;
+        } else {
+          val = 0; // separator
+        }
+        set(xx,yy,val,true);
+      }
+    }
+    addFinder(0,0);
+    addFinder(n-7,0);
+    addFinder(0,n-7);
+
+    // Timing patterns
+    for (let i=8; i<n-8; i++) {
+      set(i,6, (i%2===0)?1:0, true);
+      set(6,i, (i%2===0)?1:0, true);
+    }
+
+    // Dark module
+    set(8, n-8, 1, true);
+
+    // Alignment patterns
+    const loc = alignLocs(v);
+    function addAlign(cx,cy) {
+      for (let dy=-2; dy<=2; dy++) for (let dx=-2; dx<=2; dx++) {
+        const xx=cx+dx, yy=cy+dy;
+        if (xx<0||yy<0||xx>=n||yy>=n) continue;
+        const adx=Math.abs(dx), ady=Math.abs(dy);
+        const val = (adx===2||ady===2|| (adx===0&&ady===0)) ? 1 : 0;
+        set(xx,yy,val,true);
+      }
+    }
+    for (let i=0;i<loc.length;i++) for (let j=0;j<loc.length;j++) {
+      const cx=loc[i], cy=loc[j];
+      // skip overlaps with finders
+      const nearFinder = ( (cx<9 && cy<9) || (cx>n-10 && cy<9) || (cx<9 && cy>n-10) );
+      if (!nearFinder) addAlign(cx,cy);
+    }
+
+    // Reserve format info areas
+    for (let i=0;i<9;i++) {
+      if (i!==6) { set(8,i,0,true); set(i,8,0,true); }
+    }
+    for (let i=0;i<8;i++) {
+      set(n-1-i,8,0,true);
+      set(8,n-1-i,0,true);
+    }
+    set(8,8,0,true);
+
+    // Version info not needed for v<=10 (<7 for version info fields); for 7..10, still required by standard,
+    // but many decoders tolerate it. We'll write it for v>=7.
+    if (v >= 7) {
+      // BCH version bits (18 bits)
+      let ver = v;
+      let vbits = ver << 12;
+      const poly = 0x1f25;
+      for (let i=17;i>=12;i--) {
+        if ((vbits>>i)&1) vbits ^= poly << (i-12);
+      }
+      const bits = (ver<<12) | (vbits & 0xfff);
+      // place: top-right
+      for (let i=0;i<18;i++) {
+        const bit = (bits >> i) & 1;
+        const a = n-11 + (i%3);
+        const b = Math.floor(i/3);
+        set(a,b,bit,true);
+        set(b,a,bit,true);
+      }
+    }
+
+    return { m, isFunc };
+  }
+
+  function maskBit(mask, x, y) {
+    switch(mask) {
+      case 0: return ((x+y) % 2) === 0;
+      case 1: return (y % 2) === 0;
+      case 2: return (x % 3) === 0;
+      case 3: return ((x+y) % 3) === 0;
+      case 4: return ((Math.floor(y/2) + Math.floor(x/3)) % 2) === 0;
+      case 5: return ((x*y) % 2 + (x*y) % 3) === 0;
+      case 6: return (((x*y) % 2 + (x*y) % 3) % 2) === 0;
+      case 7: return (((x+y) % 2 + (x*y) % 3) % 2) === 0;
+      default: return false;
+    }
+  }
+
+  // Penalty scoring for mask selection (QR standard heuristics)
+  function penalty(matrix) {
+    const n = matrix.length;
+    let p = 0;
+
+    // N1: consecutive rows/cols
+    for (let y=0; y<n; y++) {
+      let runColor = matrix[y][0];
+      let runLen = 1;
+      for (let x=1; x<n; x++) {
+        if (matrix[y][x] === runColor) runLen++;
+        else {
+          if (runLen >= 5) p += 3 + (runLen - 5);
+          runColor = matrix[y][x];
+          runLen = 1;
+        }
+      }
+      if (runLen >= 5) p += 3 + (runLen - 5);
+    }
+    for (let x=0; x<n; x++) {
+      let runColor = matrix[0][x];
+      let runLen = 1;
+      for (let y=1; y<n; y++) {
+        if (matrix[y][x] === runColor) runLen++;
+        else {
+          if (runLen >= 5) p += 3 + (runLen - 5);
+          runColor = matrix[y][x];
+          runLen = 1;
+        }
+      }
+      if (runLen >= 5) p += 3 + (runLen - 5);
+    }
+
+    // N2: 2x2 blocks
+    for (let y=0; y<n-1; y++) for (let x=0; x<n-1; x++) {
+      const a = matrix[y][x];
+      if (a === matrix[y][x+1] && a === matrix[y+1][x] && a === matrix[y+1][x+1]) p += 3;
+    }
+
+    // N3: finder-like patterns
+    const pat1 = [1,0,1,1,1,0,1,0,0,0,0];
+    const pat2 = [0,0,0,0,1,0,1,1,1,0,1];
+    function matchRow(y, x0, pat) {
+      for (let k=0;k<pat.length;k++) if (matrix[y][x0+k] !== pat[k]) return false;
+      return true;
+    }
+    function matchCol(x, y0, pat) {
+      for (let k=0;k<pat.length;k++) if (matrix[y0+k][x] !== pat[k]) return false;
+      return true;
+    }
+    for (let y=0; y<n; y++) for (let x=0; x<=n-11; x++) {
+      if (matchRow(y,x,pat1) || matchRow(y,x,pat2)) p += 40;
+    }
+    for (let x=0; x<n; x++) for (let y=0; y<=n-11; y++) {
+      if (matchCol(x,y,pat1) || matchCol(x,y,pat2)) p += 40;
+    }
+
+    // N4: balance
+    let dark = 0;
+    for (let y=0; y<n; y++) for (let x=0; x<n; x++) if (matrix[y][x]) dark++;
+    const total = n*n;
+    const k = Math.abs((dark*100/total) - 50);
+    p += Math.floor(k/5) * 10;
+
+    return p;
+  }
+
+  function encode(text, ecLevel="M") {
+    // Byte mode (UTF-8)
+    const bytes = new TextEncoder().encode(text);
+
+    // choose smallest version that fits (1..10)
+    let version = 1;
+    for (; version<=10; version++) {
+      const [dataCw] = CAP[version][ecLevel];
+      const capacityBits = dataCw * 8;
+      // bits: mode(4)+len(8 for v1-9, 16 for v10 but we cap to 10; still 16 for >=10)
+      const lenBits = (version <= 9) ? 8 : 16;
+      const needed = 4 + lenBits + bytes.length*8 + 4; // + terminator up to 4
+      if (needed <= capacityBits) break;
+    }
+    if (version > 10) throw new Error("Text too long for v1..10 in this single-file build.");
+
+    const [dataCw, eccCwPerBlock, blocks] = CAP[version][ecLevel];
+
+    // Build bit buffer
+    const bits = [];
+    function pushBits(val, n) {
+      for (let i=n-1; i>=0; i--) bits.push((val>>i)&1);
+    }
+
+    // mode indicator: 0100 (byte)
+    pushBits(0b0100, 4);
+
+    // length
+    const lenBits = (version <= 9) ? 8 : 16;
+    pushBits(bytes.length, lenBits);
+
+    // data bytes
+    for (const b of bytes) pushBits(b, 8);
+
+    // terminator up to 4 bits
+    const capacityBits = dataCw*8;
+    const remain = capacityBits - bits.length;
+    const term = Math.min(4, remain);
+    for (let i=0; i<term; i++) bits.push(0);
+
+    // pad to byte boundary
+    while (bits.length % 8 !== 0) bits.push(0);
+
+    // codewords
+    const codewords = [];
+    for (let i=0; i<bits.length; i+=8) {
+      let v = 0;
+      for (let k=0; k<8; k++) v = (v<<1) | bits[i+k];
+      codewords.push(v);
+    }
+
+    // pad codewords alternating 0xEC, 0x11
+    const pads = [0xEC, 0x11];
+    let pi = 0;
+    while (codewords.length < dataCw) {
+      codewords.push(pads[pi++ % 2]);
+    }
+
+    // Split into blocks (simple equal split for versions in our table)
+    const blockDataLen = Math.floor(dataCw / blocks);
+    const extra = dataCw % blocks;
+    const dataBlocks = [];
+    let off = 0;
+    for (let b=0; b<blocks; b++) {
+      const len = blockDataLen + (b < extra ? 1 : 0);
+      dataBlocks.push(codewords.slice(off, off+len));
+      off += len;
+    }
+
+    // ECC blocks
+    const eccBlocks = dataBlocks.map(db => rsComputeECC(db, eccCwPerBlock));
+
+    // Interleave
+    const inter = [];
+    const maxDataLen = Math.max(...dataBlocks.map(b=>b.length));
+    for (let i=0; i<maxDataLen; i++) for (let b=0; b<blocks; b++) if (i < dataBlocks[b].length) inter.push(dataBlocks[b][i]);
+    for (let i=0; i<eccCwPerBlock; i++) for (let b=0; b<blocks; b++) inter.push(eccBlocks[b][i]);
+
+    // Convert to data bitstream
+    const dataBits = [];
+    for (const cw of inter) for (let i=7;i>=0;i--) dataBits.push((cw>>i)&1);
+
+    // Build base matrix
+    const { m: base, isFunc } = makeBase(version);
+    const n = base.length;
+
+    // Place data bits in zigzag
+    function placeData(mat, mask) {
+      let bitIdx = 0;
+      let dir = -1;
+      for (let x=n-1; x>0; x-=2) {
+        if (x === 6) x--; // skip timing column
+        for (let y0=0; y0<n; y0++) {
+          const y = (dir === -1) ? (n-1 - y0) : y0;
+          for (let dx=0; dx<2; dx++) {
+            const xx = x - dx;
+            if (isFunc[y][xx]) continue;
+            let v = (bitIdx < dataBits.length) ? dataBits[bitIdx++] : 0;
+            if (maskBit(mask, xx, y)) v ^= 1;
+            mat[y][xx] = v;
+          }
+        }
+        dir *= -1;
+      }
+    }
+
+    // Write format info
+    function writeFormat(mat, ec, mask) {
+      const bits15 = bchFormat(ec, mask);
+      const n = mat.length;
+
+      // around top-left
+      for (let i=0;i<=5;i++) mat[i][8] = (bits15 >> i) & 1;
+      mat[7][8] = (bits15 >> 6) & 1;
+      mat[8][8] = (bits15 >> 7) & 1;
+      mat[8][7] = (bits15 >> 8) & 1;
+      for (let i=9;i<15;i++) mat[8][14-i] = (bits15 >> i) & 1;
+
+      // top-right & bottom-left
+      for (let i=0;i<8;i++) mat[8][n-1-i] = (bits15 >> i) & 1;
+      for (let i=8;i<15;i++) mat[n-15+i][8] = (bits15 >> i) & 1;
+      mat[n-8][8] = 1; // fixed dark module already; keep consistent
+    }
+
+    // Try all 8 masks, pick best penalty
+    let bestMask = 0;
+    let bestMat = null;
+    let bestP = Infinity;
+
+    for (let mask=0; mask<8; mask++) {
+      const mat = base.map(row => row.slice());
+      placeData(mat, mask);
+      writeFormat(mat, ecLevel, mask);
+      const p = penalty(mat);
+      if (p < bestP) { bestP = p; bestMask = mask; bestMat = mat; }
+    }
+
+    return { matrix: bestMat, version, mask: bestMask, ecLevel };
+  }
+
+  return { encode };
+})();
+
+// -----------------------------
+// UI wiring
+// -----------------------------
+(() => {
+  const txt = document.getElementById("txt");
+  const ec = document.getElementById("ec");
+  const ms = document.getElementById("ms");
+  const mg = document.getElementById("mg");
+  const qrCanvas = document.getElementById("qr");
+  const qrSize = document.getElementById("qrSize");
+  const chars = document.getElementById("chars");
+  const toast = document.getElementById("toast");
+
+  const btnGen = document.getElementById("btnGen");
+  const btnClear = document.getElementById("btnClear");
+  const btnCopyText = document.getElementById("btnCopyText");
+  const btnCopyPNG = document.getElementById("btnCopyPNG");
+  const btnSave = document.getElementById("btnSave");
+  const btnShare = document.getElementById("btnShare");
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add("show");
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => toast.classList.remove("show"), 900);
+  }
+
+  function drawQR(matrix, moduleSize, marginModules) {
+    const n = matrix.length;
+    const margin = marginModules;
+    const dim = (n + 2*margin) * moduleSize;
+
+    qrCanvas.width = dim;
+    qrCanvas.height = dim;
+
+    const ctx = qrCanvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+
+    // white background
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0,0,dim,dim);
+
+    // modules
+    ctx.fillStyle = "#000";
+    for (let y=0; y<n; y++) {
+      for (let x=0; x<n; x++) {
+        if (matrix[y][x]) {
+          ctx.fillRect((x+margin)*moduleSize, (y+margin)*moduleSize, moduleSize, moduleSize);
+        }
+      }
+    }
+    qrSize.textContent = `${n}×${n} (v${current.version}, ${current.ecLevel}, mask ${current.mask})`;
+  }
+
+  let current = { matrix: [[0]], version: 1, ecLevel: "M", mask: 0 };
+
+  function generate() {
+    const s = (txt.value || "").trim();
+    chars.textContent = String(s.length);
+
+    if (!s) {
+      current = { matrix: [[0]], version: 1, ecLevel: ec.value, mask: 0 };
+      drawQR([[0]], Number(ms.value||8), Number(mg.value||4));
+      showToast("Enter text or a URL");
+      return;
+    }
+
+    try {
+      current = QR.encode(s, ec.value);
+      drawQR(current.matrix, Number(ms.value||8), Number(mg.value||4));
+      showToast("QR generated");
+    } catch (e) {
+      showToast(String(e.message || e));
+    }
+  }
+
+  btnGen.addEventListener("click", generate);
+  btnClear.addEventListener("click", () => { txt.value = ""; generate(); });
+
+  txt.addEventListener("input", () => {
+    chars.textContent = String((txt.value||"").length);
+  });
+
+  // Auto-generate once on load with an example
+  txt.value = "https://example.com";
+  generate();
+
+  // Copy text
+  btnCopyText.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(txt.value || "");
+      showToast("Copied text");
+    } catch {
+      showToast("Copy blocked by browser");
+    }
+  });
+
+  // Copy QR as PNG
+  btnCopyPNG.addEventListener("click", async () => {
+    try {
+      const blob = await new Promise(res => qrCanvas.toBlob(res, "image/png"));
+      if (!blob) throw new Error("PNG export failed");
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      showToast("Copied QR as PNG");
+    } catch {
+      showToast("Copy PNG blocked (permission)");
+    }
+  });
+
+  // Download PNG
+  btnSave.addEventListener("click", () => {
+    const a = document.createElement("a");
+    const s = (txt.value||"qr").slice(0,24).replace(/[^\w\-]+/g,"_") || "qr";
+    a.download = `qr_${s}.png`;
+    a.href = qrCanvas.toDataURL("image/png");
+    a.click();
+    showToast("Downloaded PNG");
+  });
+
+  // Share (text + image if supported)
+  btnShare.addEventListener("click", async () => {
+    const text = (txt.value||"").trim();
+    if (!text) { showToast("Nothing to share"); return; }
+    try {
+      const blob = await new Promise(res => qrCanvas.toBlob(res, "image/png"));
+      const file = new File([blob], "qr.png", { type: "image/png" });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ title: "QR Code", text, files: [file] });
+      } else if (navigator.share) {
+        await navigator.share({ title: "QR Code", text });
+      } else {
+        showToast("Share not supported");
+        return;
+      }
+      showToast("Shared");
+    } catch {
+      showToast("Share failed / blocked");
+    }
+  });
+
+  // Re-generate when settings change
+  [ec, ms, mg].forEach(el => el.addEventListener("change", generate));
+
+})();
+</script>
+</body>
+</html>

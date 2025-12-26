@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111111" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Pixel‑Life Snake (Single‑File)</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin:0; height:100%; background:#0b0b0b; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    #wrap { position:fixed; inset:0; display:flex; flex-direction:column; }
+    #topbar {
+      display:flex; align-items:center; gap:10px;
+      padding: 10px 12px;
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      z-index: 5;
+    }
+    #title { font-weight:650; font-size:14px; opacity:0.92; }
+    #stats { font-size:13px; opacity:0.82; margin-left:auto; display:flex; gap:12px; align-items:center; }
+    #btns { display:flex; gap:8px; }
+    button {
+      appearance:none; border:1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.06);
+      color:#eaeaea; padding:8px 10px; border-radius:12px;
+      font-weight:600; font-size:13px;
+    }
+    button:active { transform: translateY(1px); }
+
+    #canvas {
+      flex:1;
+      width:100%;
+      height:100%;
+      touch-action:none; /* allow custom gestures */
+      display:block;
+    }
+
+    /* On-screen D-pad for touch */
+    #pad {
+      position:fixed;
+      left: 14px;
+      bottom: 14px;
+      width: 160px;
+      height: 160px;
+      z-index: 6;
+      display:grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-rows: 1fr 1fr 1fr;
+      gap: 10px;
+      pointer-events:auto;
+      user-select:none;
+    }
+    .padbtn {
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(8px);
+      display:flex; align-items:center; justify-content:center;
+      font-size: 18px;
+      opacity: 0.92;
+    }
+    .padbtn:active { background: rgba(255,255,255,0.10); }
+    #pad .empty { border: none; background: transparent; }
+
+    /* Swipe hint */
+    #hint {
+      position:fixed;
+      right: 14px;
+      bottom: 14px;
+      z-index:6;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(8px);
+      font-size: 12px;
+      opacity: 0.78;
+      max-width: 220px;
+    }
+    #hint b { opacity:0.95; }
+
+    /* Make UI a bit smaller on tiny screens */
+    @media (max-width: 380px) {
+      #pad { width: 140px; height: 140px; gap: 8px; }
+      button { padding: 7px 9px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div id="topbar">
+      <div id="title">Pixel‑Life Snake (single HTML)</div>
+      <div id="btns">
+        <button id="btnPause" title="Pause/Resume">Pause</button>
+        <button id="btnReset" title="Restart">Restart</button>
+      </div>
+      <div id="stats">
+        <div>Score: <span id="score">0</span></div>
+        <div>Best: <span id="best">0</span></div>
+        <div>Speed: <span id="speed">8</span></div>
+      </div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <div id="pad" aria-label="Directional pad">
+      <div class="empty"></div>
+      <div class="padbtn" data-dir="U">▲</div>
+      <div class="empty"></div>
+      <div class="padbtn" data-dir="L">◀</div>
+      <div class="padbtn" data-dir="P">●</div>
+      <div class="padbtn" data-dir="R">▶</div>
+      <div class="empty"></div>
+      <div class="padbtn" data-dir="D">▼</div>
+      <div class="empty"></div>
+    </div>
+
+    <div id="hint">
+      <b>Touch:</b> swipe anywhere to steer, or use the pad.<br/>
+      <b>Tip:</b> “Add to Home screen” from Chrome menu.
+    </div>
+  </div>
+
+<script>
+(() => {
+  // -----------------------------
+  // 1) Grid + rendering setup
+  // -----------------------------
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d", { alpha: false });
+
+  // Choose a grid that feels good on phones.
+  // You can tweak these; chemistry + snake share the same lattice.
+  let H = 48;  // rows
+  let W = 28;  // cols
+
+  // Device-dependent resize: keep square-ish pixels.
+  function resize() {
+    const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+    const rect = canvas.getBoundingClientRect();
+    canvas.width  = Math.floor(rect.width  * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", resize, { passive: true });
+  resize();
+
+  // Render cell size in CSS pixels
+  function cellSize() {
+    const rect = canvas.getBoundingClientRect();
+    const cw = rect.width / W;
+    const ch = rect.height / H;
+    return Math.max(4, Math.floor(Math.min(cw, ch)));
+  }
+
+  // -----------------------------
+  // 2) Pixel‑Life chemistry state
+  // -----------------------------
+  // C(x,y) = [R,G,B] in [0,1]^3
+  const size = () => H * W;
+  let C = new Float32Array(size() * 3);
+  let C0 = new Float32Array(size() * 3); // homeostasis target
+  let Cnext = new Float32Array(size() * 3);
+
+  // Helpers
+  const idx = (r,c) => (r * W + c);
+  const clamp01 = (v) => (v < 0 ? 0 : (v > 1 ? 1 : v));
+
+  function rand01() { return Math.random(); }
+
+  function initChemistry() {
+    // Start from a soft noisy palette so it "lives" immediately.
+    for (let r=0; r<H; r++) for (let c=0; c<W; c++) {
+      const p = idx(r,c) * 3;
+      // a darkish base with noise
+      const base = 0.08 + 0.12 * rand01();
+      C[p+0] = base + 0.25 * rand01();
+      C[p+1] = base + 0.25 * rand01();
+      C[p+2] = base + 0.25 * rand01();
+      // homeostasis target: slightly smoother / darker
+      C0[p+0] = 0.10 + 0.10 * rand01();
+      C0[p+1] = 0.10 + 0.10 * rand01();
+      C0[p+2] = 0.10 + 0.10 * rand01();
+    }
+  }
+
+  // Pixel‑Life parameters (tuned for stability + vividness)
+  const chem = {
+    dt: 0.30,
+    // RGB cycle: R->G->B->R
+    k1: 0.55,
+    k2: 0.48,
+    k3: 0.52,
+    // diffusion
+    gamma: 0.11,
+    // homeostasis toward C0
+    beta: 0.035,
+    // smooth periodic loop‑pull (nice "breathing")
+    kappa: 0.022,
+    mLoop: 60,
+    // mild bounded autocatalysis
+    alpha: 0.018,
+    // snake/food injection strength
+    snakeBoost: 0.32,
+    foodBoost: 0.55,
+    // dead/calm relaxation (when snake isn't on a pixel)
+    relax: 0.045,
+  };
+
+  function phaseWeight(t, m) {
+    // 0.5*(1-cos(2π t/m)) in [0,1]
+    return 0.5 * (1 - Math.cos(2*Math.PI * (t % m) / m));
+  }
+
+  function stepChemistry(tick, snakeMask, foodCell) {
+    // snakeMask: Uint8Array size H*W, 1 where snake occupies.
+    // foodCell: integer index or -1
+    const dt = chem.dt;
+    const wph = phaseWeight(tick, chem.mLoop);
+
+    for (let r=0; r<H; r++) for (let c=0; c<W; c++) {
+      const p = idx(r,c);
+      const p3 = p * 3;
+
+      // Neighbor indices with wrap (periodic boundary)
+      const up    = idx((r-1+H)%H, c);
+      const down  = idx((r+1)%H, c);
+      const left  = idx(r, (c-1+W)%W);
+      const right = idx(r, (c+1)%W);
+
+      const up3 = up*3, down3 = down*3, left3 = left*3, right3 = right*3;
+
+      const R = C[p3+0], G = C[p3+1], B = C[p3+2];
+
+      // Laplacian (per channel)
+      const lapR = (C[up3+0] + C[down3+0] + C[left3+0] + C[right3+0] - 4*R);
+      const lapG = (C[up3+1] + C[down3+1] + C[left3+1] + C[right3+1] - 4*G);
+      const lapB = (C[up3+2] + C[down3+2] + C[left3+2] + C[right3+2] - 4*B);
+
+      // Stoichiometric RGB cycle (linear)
+      let dR = -chem.k1 * R + chem.k3 * B;
+      let dG =  chem.k1 * R - chem.k2 * G;
+      let dB =  chem.k2 * G - chem.k3 * B;
+
+      // Mild bounded autocatalysis
+      if (chem.alpha !== 0) {
+        dR += chem.alpha * R * (1 - R);
+        dG += chem.alpha * G * (1 - G);
+        dB += chem.alpha * B * (1 - B);
+      }
+
+      // Diffusion
+      dR += chem.gamma * lapR;
+      dG += chem.gamma * lapG;
+      dB += chem.gamma * lapB;
+
+      // Homeostasis + loop pull toward C0
+      dR += -chem.beta * (R - C0[p3+0]) - chem.kappa * wph * (R - C0[p3+0]);
+      dG += -chem.beta * (G - C0[p3+1]) - chem.kappa * wph * (G - C0[p3+1]);
+      dB += -chem.beta * (B - C0[p3+2]) - chem.kappa * wph * (B - C0[p3+2]);
+
+      // Snake "metabolism gate": snake pixels get an energy injection
+      const onSnake = snakeMask[p] === 1;
+      if (onSnake) {
+        dR += chem.snakeBoost * (0.65 - R);
+        dG += chem.snakeBoost * (0.35 - G);
+        dB += chem.snakeBoost * (0.85 - B);
+      } else {
+        // Calm relaxation for non-snake pixels
+        dR += -chem.relax * (R - C0[p3+0]);
+        dG += -chem.relax * (G - C0[p3+1]);
+        dB += -chem.relax * (B - C0[p3+2]);
+      }
+
+      // Food hotspot injection
+      if (p === foodCell) {
+        dR += chem.foodBoost * (0.95 - R);
+        dG += chem.foodBoost * (0.75 - G);
+        dB += chem.foodBoost * (0.15 - B);
+      }
+
+      // Euler update + clamp
+      Cnext[p3+0] = clamp01(R + dt * dR);
+      Cnext[p3+1] = clamp01(G + dt * dG);
+      Cnext[p3+2] = clamp01(B + dt * dB);
+    }
+
+    // swap
+    const tmp = C; C = Cnext; Cnext = tmp;
+  }
+
+  // -----------------------------
+  // 3) Snake state machine
+  // -----------------------------
+  const ui = {
+    score: document.getElementById("score"),
+    best: document.getElementById("best"),
+    speed: document.getElementById("speed"),
+    btnPause: document.getElementById("btnPause"),
+    btnReset: document.getElementById("btnReset"),
+  };
+
+  let best = Number(localStorage.getItem("plsnake_best") || "0");
+  ui.best.textContent = best;
+
+  const game = {
+    running: true,
+    // ticks per second (snake movement)
+    tps: 8,
+    // accumulator for fixed-step
+    acc: 0,
+    last: performance.now(),
+    tick: 0,
+    dir: { r: 0, c: 1 },
+    nextDir: { r: 0, c: 1 },
+    snake: [], // array of cell indices, head at 0
+    snakeSet: null, // Uint8Array mask
+    food: -1,
+    score: 0,
+    grow: 0,
+    over: false,
+  };
+
+  function resetGame() {
+    game.over = false;
+    game.score = 0;
+    ui.score.textContent = "0";
+    game.tps = 8;
+    ui.speed.textContent = game.tps;
+
+    game.snake = [];
+    game.snakeSet = new Uint8Array(size());
+
+    const startR = Math.floor(H/2);
+    const startC = Math.floor(W/2);
+    const head = idx(startR, startC);
+    const tail1 = idx(startR, startC-1);
+    const tail2 = idx(startR, startC-2);
+
+    game.snake.push(head, tail1, tail2);
+    game.snakeSet[head] = 1;
+    game.snakeSet[tail1] = 1;
+    game.snakeSet[tail2] = 1;
+
+    game.dir = { r: 0, c: 1 };
+    game.nextDir = { r: 0, c: 1 };
+    game.grow = 0;
+
+    spawnFood();
+  }
+
+  function spawnFood() {
+    let tries = 0;
+    while (tries++ < 2000) {
+      const p = Math.floor(Math.random() * size());
+      if (game.snakeSet[p] === 0) { game.food = p; return; }
+    }
+    // If grid is full, you win.
+    game.food = -1;
+    game.over = true;
+  }
+
+  function setDir(dr, dc) {
+    // prevent 180-degree reversal
+    if (dr === -game.dir.r && dc === -game.dir.c) return;
+    game.nextDir = { r: dr, c: dc };
+  }
+
+  function stepSnake() {
+    if (game.over) return;
+
+    game.dir = game.nextDir;
+
+    const head = game.snake[0];
+    const hr = Math.floor(head / W);
+    const hc = head % W;
+
+    const nr = (hr + game.dir.r + H) % H;
+    const nc = (hc + game.dir.c + W) % W;
+    const next = idx(nr, nc);
+
+    // collision: allow moving into the tail if it will move away this tick
+    const tail = game.snake[game.snake.length - 1];
+    const tailWillMove = (game.grow === 0);
+    const isCollision = (game.snakeSet[next] === 1) && !(tailWillMove && next === tail);
+
+    if (isCollision) {
+      game.over = true;
+      game.running = false;
+      ui.btnPause.textContent = "Resume";
+      // Flash background target a bit on game over
+      for (let i=0; i<C0.length; i++) C0[i] = Math.min(1, C0[i] + 0.08);
+      return;
+    }
+
+    // move head
+    game.snake.unshift(next);
+    game.snakeSet[next] = 1;
+
+    // eat
+    if (next === game.food) {
+      game.score += 1;
+      ui.score.textContent = String(game.score);
+
+      if (game.score > best) {
+        best = game.score;
+        localStorage.setItem("plsnake_best", String(best));
+        ui.best.textContent = String(best);
+      }
+
+      // grow by 2 segments and speed up slowly
+      game.grow += 2;
+      if (game.score % 4 === 0) {
+        game.tps = Math.min(18, game.tps + 1);
+        ui.speed.textContent = String(game.tps);
+      }
+      spawnFood();
+    }
+
+    // remove tail if not growing
+    if (game.grow > 0) {
+      game.grow -= 1;
+    } else {
+      const t = game.snake.pop();
+      game.snakeSet[t] = 0;
+    }
+  }
+
+  // -----------------------------
+  // 4) Rendering
+  // -----------------------------
+  function draw() {
+    const rect = canvas.getBoundingClientRect();
+    const s = cellSize();
+    const gridW = W * s;
+    const gridH = H * s;
+    const ox = Math.floor((rect.width - gridW) / 2);
+    const oy = Math.floor((rect.height - gridH) / 2);
+
+    // background
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, rect.width, rect.height);
+
+    // draw chemistry as pixels
+    // (fast enough for these grid sizes)
+    for (let r=0; r<H; r++) {
+      for (let c=0; c<W; c++) {
+        const p3 = idx(r,c) * 3;
+
+        // boost snake pixels a bit for readability
+        const onSnake = game.snakeSet[idx(r,c)] === 1;
+
+        let R = C[p3+0], G = C[p3+1], B = C[p3+2];
+        if (onSnake) {
+          R = clamp01(R + 0.20);
+          G = clamp01(G + 0.10);
+          B = clamp01(B + 0.25);
+        }
+
+        const rr = (R * 255) | 0;
+        const gg = (G * 255) | 0;
+        const bb = (B * 255) | 0;
+
+        ctx.fillStyle = `rgb(${rr},${gg},${bb})`;
+        ctx.fillRect(ox + c*s, oy + r*s, s, s);
+      }
+    }
+
+    // overlay: food + head marker
+    if (game.food >= 0) {
+      const fr = Math.floor(game.food / W);
+      const fc = game.food % W;
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.fillRect(ox + fc*s + Math.floor(s*0.25), oy + fr*s + Math.floor(s*0.25), Math.floor(s*0.5), Math.floor(s*0.5));
+    }
+
+    // head ring
+    const head = game.snake[0];
+    const hr = Math.floor(head / W);
+    const hc = head % W;
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = Math.max(1, Math.floor(s*0.10));
+    ctx.strokeRect(ox + hc*s + 1, oy + hr*s + 1, s - 2, s - 2);
+
+    // game over text
+    if (game.over) {
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(0, 0, rect.width, rect.height);
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.font = "700 20px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("Game Over", rect.width/2, rect.height/2 - 10);
+      ctx.font = "600 13px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      ctx.fillStyle = "rgba(255,255,255,0.80)";
+      ctx.fillText("Tap Restart, or press Space", rect.width/2, rect.height/2 + 18);
+    }
+  }
+
+  // -----------------------------
+  // 5) Input (keyboard + touch)
+  // -----------------------------
+  // Keyboard
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowUp"    || e.key === "w") setDir(-1, 0);
+    if (e.key === "ArrowDown"  || e.key === "s") setDir( 1, 0);
+    if (e.key === "ArrowLeft"  || e.key === "a") setDir( 0,-1);
+    if (e.key === "ArrowRight" || e.key === "d") setDir( 0, 1);
+
+    if (e.key === " " || e.key === "Enter") togglePause();
+    if (e.key === "r") { resetGame(); game.running = true; ui.btnPause.textContent = "Pause"; }
+  }, { passive: true });
+
+  // D-pad
+  document.getElementById("pad").addEventListener("pointerdown", (e) => {
+    const btn = e.target.closest(".padbtn");
+    if (!btn) return;
+    const d = btn.getAttribute("data-dir");
+    if (d === "U") setDir(-1, 0);
+    if (d === "D") setDir( 1, 0);
+    if (d === "L") setDir( 0,-1);
+    if (d === "R") setDir( 0, 1);
+    if (d === "P") togglePause();
+  });
+
+  // Swipe anywhere on canvas
+  let touchStart = null;
+  canvas.addEventListener("pointerdown", (e) => {
+    canvas.setPointerCapture(e.pointerId);
+    touchStart = { x: e.clientX, y: e.clientY, t: performance.now() };
+  });
+  canvas.addEventListener("pointerup", (e) => {
+    if (!touchStart) return;
+    const dx = e.clientX - touchStart.x;
+    const dy = e.clientY - touchStart.y;
+    const dt = performance.now() - touchStart.t;
+
+    // tap (small movement) toggles pause
+    if (Math.hypot(dx,dy) < 10 && dt < 250) {
+      togglePause();
+      touchStart = null;
+      return;
+    }
+
+    // swipe direction
+    if (Math.abs(dx) > Math.abs(dy)) {
+      if (dx > 0) setDir(0, 1);
+      else setDir(0, -1);
+    } else {
+      if (dy > 0) setDir(1, 0);
+      else setDir(-1, 0);
+    }
+    touchStart = null;
+  });
+
+  // Buttons
+  function togglePause() {
+    if (game.over) return;
+    game.running = !game.running;
+    ui.btnPause.textContent = game.running ? "Pause" : "Resume";
+  }
+  ui.btnPause.addEventListener("click", togglePause);
+  ui.btnReset.addEventListener("click", () => {
+    resetGame();
+    game.running = true;
+    ui.btnPause.textContent = "Pause";
+  });
+
+  // -----------------------------
+  // 6) Main loop
+  // -----------------------------
+  function frame(now) {
+    const dt = (now - game.last) / 1000;
+    game.last = now;
+
+    // Run chemistry every frame (smooth visuals).
+    // Run snake on fixed ticks based on TPS.
+    if (game.running && !game.over) {
+      game.acc += dt;
+      const step = 1 / game.tps;
+      while (game.acc >= step) {
+        game.acc -= step;
+        game.tick += 1;
+        stepSnake();
+      }
+    }
+
+    // Chemistry step: always run (even paused) so it looks alive.
+    // If game over, slow it down.
+    const chemSteps = game.over ? 1 : 2; // 2 gives richer motion
+    for (let i=0; i<chemSteps; i++) {
+      stepChemistry(game.tick * 2 + i, game.snakeSet, game.food);
+    }
+
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  // -----------------------------
+  // 7) Boot
+  // -----------------------------
+  initChemistry();
+  resetGame();
+  requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
