@@ -1,0 +1,972 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b0b" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Qur’an Reader (Single-File • 114 Surahs)</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin:0; height:100%; background:#070707; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    #stage { position:fixed; inset:0; overflow:hidden; }
+    #ui { position:absolute; inset:0; display:flex; flex-direction:column; padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); gap:10px; }
+
+    .bar {
+      display:flex; align-items:center; gap:10px;
+      padding: 10px 12px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(10px);
+    }
+    #title { font-weight:850; font-size:14px; opacity:0.94; }
+    #sub { margin-left:auto; font-size:12px; opacity:0.72; }
+
+    #main {
+      flex:1;
+      min-height:0;
+      display:grid;
+      grid-template-columns: 330px 1fr;
+      gap:10px;
+    }
+
+    .card {
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.46);
+      backdrop-filter: blur(12px);
+      padding: 12px;
+      min-height: 0;
+    }
+
+    /* Sidebar */
+    #sidebar { display:flex; flex-direction:column; gap:10px; min-height:0; }
+    #searchRow { display:flex; gap:10px; align-items:center; }
+    input[type="text"] {
+      flex:1;
+      border-radius: 16px;
+      padding: 10px 10px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
+      color: rgba(255,255,255,0.92);
+      outline: none;
+      font-size: 13px;
+    }
+    input[type="text"]:focus { border-color: rgba(255,255,255,0.22); }
+
+    button, select, input[type="range"] {
+      appearance:none;
+      border:1px solid rgba(255,255,255,0.14);
+      background: rgba(0,0,0,0.42);
+      backdrop-filter: blur(10px);
+      color: rgba(255,255,255,0.92);
+      padding: 10px 10px;
+      border-radius: 16px;
+      font-weight: 750;
+      font-size: 13px;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    button:active { transform: translateY(1px); background: rgba(255,255,255,0.09); }
+    .btnSmall { padding: 10px 10px; border-radius: 16px; }
+
+    #surahList {
+      flex:1;
+      min-height:0;
+      overflow:auto;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .row {
+      padding: 10px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      display:flex;
+      gap:10px;
+      align-items:center;
+      cursor:pointer;
+    }
+    .row:last-child { border-bottom:none; }
+    .row:hover { background: rgba(255,255,255,0.05); }
+    .row.active { background: rgba(255,255,255,0.08); }
+    .n {
+      width: 30px; text-align:center; font-weight:850; opacity:0.85;
+      border:1px solid rgba(255,255,255,0.10); border-radius: 12px; padding:6px 0;
+      background: rgba(255,255,255,0.04);
+    }
+    .names { min-width:0; }
+    .en { font-size: 13px; font-weight: 800; opacity:0.92; }
+    .arName { font-size: 13px; opacity:0.85; direction: rtl; font-family: "Noto Naskh Arabic", "Amiri", serif; }
+    .meta { margin-left:auto; font-size: 12px; opacity:0.72; white-space: nowrap; }
+
+    /* Reader */
+    #reader { display:flex; flex-direction:column; gap:10px; min-height:0; }
+    #readerTop { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    #readerTitle {
+      font-weight:900;
+      letter-spacing: 0.2px;
+      display:flex;
+      gap:10px;
+      align-items:baseline;
+    }
+    #readerTitle .ar { direction:rtl; font-family: "Noto Naskh Arabic", "Amiri", serif; font-size: 18px; opacity:0.92; }
+    #readerTitle .en { font-size: 14px; opacity:0.80; font-weight:800; }
+
+    .pill {
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.05);
+      font-size: 12px;
+      opacity:0.82;
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+    #fontVal { font-weight:900; }
+
+    #verses {
+      flex:1;
+      min-height:0;
+      overflow:auto;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 6px;
+    }
+    .ayah {
+      padding: 12px 12px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(0,0,0,0.35);
+      margin: 8px 6px;
+    }
+    .ayahHead { display:flex; align-items:center; gap:10px; }
+    .ayahNum {
+      width: 34px; text-align:center;
+      font-weight: 900;
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 14px;
+      padding: 7px 0;
+      background: rgba(255,255,255,0.04);
+      opacity:0.88;
+    }
+    .ayahActions { margin-left:auto; display:flex; gap:8px; }
+    .iconBtn {
+      padding: 8px 10px; border-radius: 14px; font-weight: 900; font-size: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.05);
+    }
+
+    .arabic {
+      margin-top: 10px;
+      direction: rtl;
+      font-family: "Noto Naskh Arabic", "Amiri", serif;
+      line-height: 1.9;
+      font-size: var(--arabicSize, 26px);
+      opacity:0.96;
+    }
+    .trans {
+      margin-top: 10px;
+      font-size: 13px;
+      line-height: 1.5;
+      opacity: 0.78;
+    }
+    .hidden { display:none !important; }
+
+    /* Footer controls */
+    #footerRow {
+      display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+    }
+    #fileInput { display:none; }
+
+    #toast {
+      position: absolute;
+      left: 50%;
+      bottom: calc(10px + env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(10px);
+      font-size: 12px;
+      opacity: 0;
+      transition: opacity 180ms ease;
+      pointer-events:none;
+      max-width: 92vw;
+      white-space: nowrap;
+      overflow:hidden;
+      text-overflow: ellipsis;
+    }
+    #toast.show { opacity: 0.86; }
+
+    @media (max-width: 860px) {
+      #main { grid-template-columns: 1fr; }
+      #surahList { max-height: 260px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <div id="ui">
+      <div class="bar">
+        <div id="title">Qur’an Reader (single file • 114 surahs)</div>
+        <div id="sub">Online text + cached offline • Chrome/PWA</div>
+      </div>
+
+      <div id="main">
+        <div id="sidebar" class="card">
+          <div id="searchRow">
+            <input id="search" type="text" placeholder="Search surah name (Arabic/English)…" />
+            <button id="btnBookmarks" class="btnSmall" title="Show bookmarks">★</button>
+          </div>
+          <div id="surahList" aria-label="Surah list"></div>
+
+          <div id="footerRow">
+            <button id="btnLoad114">Load 114 surahs</button>
+            <button id="btnDownloadAll" class="btnSmall">Download all (offline)</button>
+            <button id="btnClearCache" class="btnSmall">Clear cache</button>
+            <button id="btnImport">Import JSON</button>
+            <button id="btnExport">Export bookmarks</button>
+            <button id="btnReset">Reset</button>
+            <input id="fileInput" type="file" accept="application/json" />
+          </div>
+
+          <div style="font-size:12px; opacity:0.78; line-height:1.35; margin-top:8px;">
+            Tap “Load 114 surahs” to fetch the full surah list (names + counts). Selecting a surah pulls its Arabic text + English translation and caches it locally.<br/>
+            “Download all” fetches and caches every surah (bigger download, but then you’re offline-ready).<br/><br/>
+            Sources used by default: Quran text + translation: <b>api.alquran.cloud</b>. Surah audio: Archive.org item “Quran‑MP3‑Ghamdi” (Public Domain label).
+          </div>
+        </div>
+
+        <div id="reader" class="card">
+          <div id="readerTop">
+            <div id="readerTitle">
+              <span class="ar" id="surahAr">—</span>
+              <span class="en" id="surahEn">—</span>
+            </div>
+            <button id="btnPlaySurah" class="btnSmall" title="Play whole surah audio">♪</button>
+
+            <div class="pill">
+              Arabic size: <span id="fontVal">26</span>px
+              <input id="font" type="range" min="18" max="40" value="26" />
+            </div>
+
+            <div class="pill">
+              Translation
+              <select id="showTrans">
+                <option value="off" selected>Off</option>
+                <option value="on">On</option>
+              </select>
+            </div>
+
+            <div class="pill">
+              Audio
+              <select id="audioMode">
+                <option value="off" selected>Off</option>
+                <option value="archive">Public domain (surah audio)</option>
+                <option value="templ">URL template</option>
+              </select>
+            </div>
+
+            <div class="pill hidden" id="audioTplWrap">
+              <span style="opacity:0.8;">Template:</span>
+              <input id="audioTpl" type="text" style="width:280px;"
+                     placeholder="https://…/{s}/{a}.mp3 (s=surah, a=ayah)" />
+            </div>
+          </div>
+
+          <div id="verses" aria-label="Verses"></div>
+        </div>
+      </div>
+
+      <div id="toast"></div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // -----------------------
+  // Defaults / sample
+  // -----------------------
+  const SAMPLE = {
+    meta: { source: "Sample only", translation: "" },
+    surahs: [
+      { number: 1, name_en: "Al-Fātiḥah", name_ar: "ٱلْفَاتِحَة", ayahs: [
+        { n: 1, ar: "بِسْمِ ٱللَّٰهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ" },
+        { n: 2, ar: "ٱلْحَمْدُ لِلَّٰهِ رَبِّ ٱلْعَـٰلَمِينَ" },
+        { n: 3, ar: "ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ" },
+        { n: 4, ar: "مَـٰلِكِ يَوْمِ ٱلدِّينِ" },
+        { n: 5, ar: "إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ" },
+        { n: 6, ar: "ٱهْدِنَا ٱلصِّرَٰطَ ٱلْمُسْتَقِيمَ" },
+        { n: 7, ar: "صِرَٰطَ ٱلَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ ٱلْمَغْضُوبِ عَلَيْهِمْ وَلَا ٱلضَّآلِّينَ" }
+      ] }
+    ]
+  };
+
+  // -----------------------
+  // Sources
+  // -----------------------
+  const API_BASE = "https://api.alquran.cloud/v1";
+  const EDITION_AR = "quran-uthmani";
+  const EDITION_EN = "en.asad"; // good general English translation; change if you prefer
+  const SURAH_LIST_URL = `${API_BASE}/surah`;
+  const SURAH_EDITIONS_URL = (n) => `${API_BASE}/surah/${n}/editions/${EDITION_AR},${EDITION_EN}`;
+
+  // Public-domain labeled surah MP3 set on Archive.org:
+  // https://archive.org/details/Quran-MP3-Ghamdi  (download dir: /download/Quran-MP3-Ghamdi/001.mp3 ... 114.mp3)
+  const ARCHIVE_MP3_BASE = "https://archive.org/download/Quran-MP3-Ghamdi/";
+  const pad3 = (n) => String(n).padStart(3, "0");
+
+  // -----------------------
+  // Storage keys
+  // -----------------------
+  const LS_BM   = "quran114_bookmarks_v1";
+  const LS_SET  = "quran114_settings_v1";
+  const LS_META = "quran114_surahmeta_v1";
+  const LS_ALL  = "quran114_all_cached_v1";
+
+  // IndexedDB cache for surah payloads
+  const IDB_NAME  = "quran114_cache_v1";
+  const IDB_STORE = "surahs";
+
+  function idbOpen() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idbGet(key) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readonly");
+      const st = tx.objectStore(IDB_STORE);
+      const req = st.get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idbSet(key, val) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      const st = tx.objectStore(IDB_STORE);
+      const req = st.put(val, key);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idbClear() {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      const st = tx.objectStore(IDB_STORE);
+      const req = st.clear();
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  // -----------------------
+  // App state
+  // -----------------------
+  let DATA = SAMPLE;
+  let BOOKMARKS = loadBookmarks();
+  let SETTINGS = loadSettings();
+  let currentSurah = 1;
+  let showBookmarksOnly = false;
+
+  // -----------------------
+  // UI refs
+  // -----------------------
+  const elList = document.getElementById("surahList");
+  const elSearch = document.getElementById("search");
+  const elVerses = document.getElementById("verses");
+  const elSurahAr = document.getElementById("surahAr");
+  const elSurahEn = document.getElementById("surahEn");
+  const elFont = document.getElementById("font");
+  const elFontVal = document.getElementById("fontVal");
+  const elShowTrans = document.getElementById("showTrans");
+  const elAudioMode = document.getElementById("audioMode");
+  const elAudioTplWrap = document.getElementById("audioTplWrap");
+  const elAudioTpl = document.getElementById("audioTpl");
+  const elToast = document.getElementById("toast");
+
+  const btnLoad114 = document.getElementById("btnLoad114");
+  const btnDownloadAll = document.getElementById("btnDownloadAll");
+  const btnClearCache = document.getElementById("btnClearCache");
+  const btnImport = document.getElementById("btnImport");
+  const btnExport = document.getElementById("btnExport");
+  const btnReset = document.getElementById("btnReset");
+  const btnBookmarks = document.getElementById("btnBookmarks");
+  const btnPlaySurah = document.getElementById("btnPlaySurah");
+  const fileInput = document.getElementById("fileInput");
+
+  function toast(msg) {
+    elToast.textContent = msg;
+    elToast.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => elToast.classList.remove("show"), 1100);
+  }
+
+  function normalize(s) { return (s || "").toLowerCase(); }
+
+  // -----------------------
+  // Bookmarks / settings
+  // -----------------------
+  function loadBookmarks() {
+    const raw = localStorage.getItem(LS_BM);
+    if (!raw) return [];
+    try { return JSON.parse(raw); } catch { return []; }
+  }
+  function saveBookmarks() { localStorage.setItem(LS_BM, JSON.stringify(BOOKMARKS)); }
+
+  function loadSettings() {
+    const raw = localStorage.getItem(LS_SET);
+    if (!raw) return { font: 26, showTrans: "off", audioMode: "off", audioTpl: "" };
+    try { return Object.assign({ font: 26, showTrans: "off", audioMode: "off", audioTpl: "" }, JSON.parse(raw)); }
+    catch { return { font: 26, showTrans: "off", audioMode: "off", audioTpl: "" }; }
+  }
+  function saveSettings() { localStorage.setItem(LS_SET, JSON.stringify(SETTINGS)); }
+
+  function setFont(px) {
+    document.documentElement.style.setProperty("--arabicSize", px + "px");
+    elFontVal.textContent = String(px);
+  }
+
+  function isBookmarked(s, a) { return BOOKMARKS.some(x => x.s === s && x.a === a); }
+
+  function toggleBookmark(s, a) {
+    if (isBookmarked(s,a)) {
+      BOOKMARKS = BOOKMARKS.filter(x => !(x.s===s && x.a===a));
+      toast("Removed bookmark");
+    } else {
+      BOOKMARKS.unshift({ s, a, t: Date.now() });
+      toast("Bookmarked");
+    }
+    saveBookmarks();
+    renderVerses(false);
+  }
+
+  // -----------------------
+  // Data: meta list (114) + per-surah content
+  // -----------------------
+  function saveMetaList(metaSurahs) {
+    localStorage.setItem(LS_META, JSON.stringify(metaSurahs));
+  }
+  function loadMetaList() {
+    const raw = localStorage.getItem(LS_META);
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+
+  function applyMetaList(metaSurahs) {
+    // Keep any already loaded ayahs if present
+    const mapExisting = new Map(DATA.surahs.map(s => [s.number, s]));
+    DATA = {
+      meta: { source: "api.alquran.cloud (surah list + per-surah editions)", translation: EDITION_EN },
+      surahs: metaSurahs.map(ms => {
+        const ex = mapExisting.get(ms.number);
+        return {
+          number: ms.number,
+          name_ar: ms.name_ar || ms.name || "",
+          name_en: ms.name_en || ms.englishName || "",
+          ayahs: Array.isArray(ex?.ayahs) ? ex.ayahs : []
+        };
+      })
+    };
+    const exists = DATA.surahs.some(s => s.number === currentSurah);
+    if (!exists) currentSurah = DATA.surahs[0]?.number ?? 1;
+    renderSurahList();
+  }
+
+  async function fetchMeta114() {
+    const res = await fetch(SURAH_LIST_URL, { cache: "no-store" });
+    if (!res.ok) throw new Error("Meta HTTP " + res.status);
+    const j = await res.json();
+    // API returns: {data:[{number,name,englishName,englishNameTranslation,numberOfAyahs,revelationType}]}
+    const arr = (j && j.data) ? j.data : [];
+    const metaSurahs = arr.map(s => ({
+      number: Number(s.number),
+      name_ar: s.name || "",
+      name_en: s.englishName || "",
+      count: Number(s.numberOfAyahs || 0)
+    }));
+    if (metaSurahs.length !== 114) {
+      // still accept, but warn
+      toast("Meta loaded (" + metaSurahs.length + ")");
+    }
+    saveMetaList(metaSurahs);
+    return metaSurahs;
+  }
+
+  async function ensureSurahLoaded(n, force=false) {
+    // 1) If already loaded in memory and not forcing, done
+    const mem = DATA.surahs.find(s => s.number === n);
+    if (!force && mem && Array.isArray(mem.ayahs) && mem.ayahs.length > 0) return mem;
+
+    // 2) Try cache
+    if (!force) {
+      try {
+        const cached = await idbGet(String(n));
+        if (cached && Array.isArray(cached.ayahs) && cached.ayahs.length > 0) {
+          mergeSurahIntoData(cached);
+          return cached;
+        }
+      } catch {}
+    }
+
+    // 3) Fetch from API (Arabic + English)
+    const url = SURAH_EDITIONS_URL(n);
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error("Surah HTTP " + res.status);
+    const j = await res.json();
+    // Response: {data:[ edition1{number,name,englishName,ayahs:[{numberInSurah,text}]}, edition2{...}]}
+    const editions = j && j.data ? j.data : [];
+    const edAr = editions.find(e => e.edition?.identifier === EDITION_AR) || editions[0];
+    const edEn = editions.find(e => e.edition?.identifier === EDITION_EN) || editions[1];
+
+    const ayAr = (edAr && edAr.ayahs) ? edAr.ayahs : [];
+    const ayEn = (edEn && edEn.ayahs) ? edEn.ayahs : [];
+
+    const surahObj = {
+      number: Number(edAr.number || n),
+      name_ar: edAr.name || "",
+      name_en: edAr.englishName || (edEn ? edEn.englishName : "") || ("Surah " + n),
+      ayahs: ayAr.map((a, i) => ({
+        n: Number(a.numberInSurah || (i+1)),
+        ar: a.text || "",
+        tr: (ayEn[i] ? (ayEn[i].text || "") : "")
+      }))
+    };
+
+    // Cache + merge
+    try { await idbSet(String(n), surahObj); } catch {}
+    mergeSurahIntoData(surahObj);
+    return surahObj;
+  }
+
+  function mergeSurahIntoData(surahObj) {
+    const idx = DATA.surahs.findIndex(s => s.number === surahObj.number);
+    if (idx >= 0) {
+      DATA.surahs[idx] = Object.assign({}, DATA.surahs[idx], surahObj);
+    } else {
+      // if meta not loaded yet, just append
+      DATA.surahs.push(surahObj);
+      DATA.surahs.sort((a,b)=>a.number-b.number);
+    }
+  }
+
+  // -----------------------
+  // Rendering
+  // -----------------------
+  function renderSurahList() {
+    elList.innerHTML = "";
+    const q = normalize(elSearch.value).trim();
+    let surahs = DATA.surahs.slice();
+
+    if (showBookmarksOnly) {
+      const has = new Set(BOOKMARKS.map(b => b.s));
+      surahs = surahs.filter(s => has.has(s.number));
+    }
+
+    if (q) {
+      surahs = surahs.filter(s => {
+        if (normalize(s.name_en).includes(q)) return true;
+        if (normalize(s.name_ar).includes(q)) return true;
+        return false;
+      });
+    }
+
+    for (const s of surahs) {
+      const row = document.createElement("div");
+      row.className = "row" + (s.number === currentSurah ? " active" : "");
+      row.addEventListener("click", async () => {
+        currentSurah = s.number;
+        showBookmarksOnly = false;
+        btnBookmarks.textContent = "★";
+        renderSurahList();
+        await openSurah(currentSurah);
+      });
+
+      const n = document.createElement("div");
+      n.className = "n";
+      n.textContent = String(s.number);
+
+      const names = document.createElement("div");
+      names.className = "names";
+      const en = document.createElement("div");
+      en.className = "en";
+      en.textContent = s.name_en || ("Surah " + s.number);
+      const ar = document.createElement("div");
+      ar.className = "arName";
+      ar.textContent = s.name_ar || "";
+      names.appendChild(en);
+      names.appendChild(ar);
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = (Array.isArray(s.ayahs) && s.ayahs.length) ? `${s.ayahs.length} ayah` : "tap to load";
+
+      row.appendChild(n);
+      row.appendChild(names);
+      row.appendChild(meta);
+      elList.appendChild(row);
+    }
+
+    if (!surahs.length) {
+      const empty = document.createElement("div");
+      empty.style.padding = "12px";
+      empty.style.opacity = "0.75";
+      empty.textContent = "No results.";
+      elList.appendChild(empty);
+    }
+  }
+
+  function renderVerses(scrollTop=false) {
+    const s = DATA.surahs.find(x => x.number === currentSurah);
+    if (!s) return;
+
+    elSurahAr.textContent = s.name_ar || "";
+    elSurahEn.textContent = (s.name_en ? (s.name_en + " • " + s.number) : ("Surah " + s.number));
+
+    elVerses.innerHTML = "";
+
+    const transOn = (SETTINGS.showTrans === "on");
+
+    let items = [];
+    if (showBookmarksOnly) {
+      for (const b of BOOKMARKS) {
+        const ss = DATA.surahs.find(x => x.number === b.s);
+        const aa = ss?.ayahs?.find(x => x.n === b.a);
+        if (ss && aa) items.push({ surah: ss, ayah: aa });
+      }
+    } else {
+      if (!Array.isArray(s.ayahs) || s.ayahs.length === 0) {
+        const hint = document.createElement("div");
+        hint.style.padding = "14px";
+        hint.style.opacity = "0.78";
+        hint.textContent = "This surah isn’t loaded yet. Tap the surah again to fetch it (or press “Download all”).";
+        elVerses.appendChild(hint);
+        return;
+      }
+      items = s.ayahs.map(a => ({ surah: s, ayah: a }));
+    }
+
+    for (const it of items) {
+      const sur = it.surah;
+      const a = it.ayah;
+
+      const box = document.createElement("div");
+      box.className = "ayah";
+
+      const head = document.createElement("div");
+      head.className = "ayahHead";
+
+      const num = document.createElement("div");
+      num.className = "ayahNum";
+      num.textContent = String(a.n);
+
+      const actions = document.createElement("div");
+      actions.className = "ayahActions";
+
+      const bmk = document.createElement("button");
+      bmk.className = "iconBtn";
+      bmk.textContent = isBookmarked(sur.number, a.n) ? "★" : "☆";
+      bmk.title = "Bookmark";
+      bmk.addEventListener("click", (e) => { e.stopPropagation(); toggleBookmark(sur.number, a.n); });
+
+      const copy = document.createElement("button");
+      copy.className = "iconBtn";
+      copy.textContent = "Copy";
+      copy.title = "Copy ayah text";
+      copy.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const header = `${sur.name_en || "Surah"} ${sur.number}:${a.n}`;
+        const text = `${header}\n${a.ar}` + (a.tr ? `\n\n${a.tr}` : "");
+        try { await navigator.clipboard.writeText(text); toast("Copied"); }
+        catch { toast("Copy blocked"); }
+      });
+
+      actions.appendChild(bmk);
+      actions.appendChild(copy);
+
+      head.appendChild(num);
+
+      if (showBookmarksOnly) {
+        const label = document.createElement("div");
+        label.style.opacity = "0.78";
+        label.style.fontSize = "12px";
+        label.style.fontWeight = "800";
+        label.textContent = `${sur.name_en || "Surah"} ${sur.number}`;
+        head.appendChild(label);
+      }
+
+      head.appendChild(actions);
+
+      const ar = document.createElement("div");
+      ar.className = "arabic";
+      ar.textContent = a.ar || "";
+
+      const tr = document.createElement("div");
+      tr.className = "trans" + (transOn ? "" : " hidden");
+      tr.textContent = a.tr ? a.tr : "Translation not loaded.";
+
+      box.appendChild(head);
+      box.appendChild(ar);
+      box.appendChild(tr);
+      elVerses.appendChild(box);
+    }
+
+    if (scrollTop) elVerses.scrollTop = 0;
+  }
+
+  // -----------------------
+  // Audio
+  // -----------------------
+  let audio = new Audio();
+  audio.preload = "none";
+
+  function buildAudioUrlSurah(n) {
+    if (SETTINGS.audioMode === "archive") return ARCHIVE_MP3_BASE + pad3(n) + ".mp3";
+    return null;
+  }
+  function buildAudioUrlAyah(nSurah, nAyah) {
+    const tpl = (SETTINGS.audioTpl || "").trim();
+    if (!tpl) return null;
+    return tpl.replaceAll("{s}", String(nSurah)).replaceAll("{a}", String(nAyah));
+  }
+
+  btnPlaySurah.addEventListener("click", () => {
+    if (SETTINGS.audioMode === "off") { toast("Audio is off"); return; }
+    if (SETTINGS.audioMode === "archive") {
+      const url = buildAudioUrlSurah(currentSurah);
+      try {
+        audio.pause();
+        audio.src = url;
+        audio.play();
+        toast("Playing surah…");
+      } catch { toast("Audio failed"); }
+      return;
+    }
+    toast("Use a URL template for per-ayah audio.");
+  });
+
+  // -----------------------
+  // Actions: load 114 / download all / cache
+  // -----------------------
+  async function openSurah(n) {
+    try {
+      toast("Loading surah " + n + "…");
+      await ensureSurahLoaded(n);
+      renderSurahList();
+      renderVerses(true);
+      toast("Loaded surah " + n);
+    } catch (e) {
+      renderVerses(false);
+      toast("Load failed (" + (e.message || e) + ")");
+    }
+  }
+
+  btnLoad114.addEventListener("click", async () => {
+    try {
+      toast("Fetching 114 surahs…");
+      const meta = await fetchMeta114();
+      applyMetaList(meta);
+      // pick current
+      currentSurah = DATA.surahs[0]?.number ?? 1;
+      renderSurahList();
+      renderVerses(true);
+      toast("Loaded list: " + meta.length);
+    } catch (e) {
+      toast("Failed: " + (e.message || e));
+    }
+  });
+
+  btnDownloadAll.addEventListener("click", async () => {
+    try {
+      // Ensure meta list exists first
+      let meta = loadMetaList();
+      if (!meta) {
+        toast("Fetching surah list first…");
+        meta = await fetchMeta114();
+      }
+      applyMetaList(meta);
+
+      toast("Downloading 1/114…");
+      for (let i = 1; i <= 114; i++) {
+        await ensureSurahLoaded(i, false);
+        if (i % 5 === 0 || i === 114) toast("Downloaded " + i + "/114");
+      }
+      localStorage.setItem(LS_ALL, "1");
+      toast("All 114 cached");
+      renderSurahList();
+      await openSurah(currentSurah);
+    } catch (e) {
+      toast("Download failed: " + (e.message || e));
+    }
+  });
+
+  btnClearCache.addEventListener("click", async () => {
+    try {
+      await idbClear();
+      localStorage.removeItem(LS_ALL);
+      toast("Cache cleared");
+      // keep meta list
+      // clear loaded ayahs in memory
+      DATA.surahs = DATA.surahs.map(s => Object.assign({}, s, { ayahs: [] }));
+      renderSurahList();
+      renderVerses(false);
+    } catch (e) {
+      toast("Clear failed");
+    }
+  });
+
+  // -----------------------
+  // Import/export/reset
+  // -----------------------
+  btnImport.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", async () => {
+    const f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    try {
+      const txt = await f.text();
+      const obj = JSON.parse(txt);
+      if (!obj || !Array.isArray(obj.surahs)) throw new Error("Invalid JSON: expected {surahs:[…]}");
+      for (const s of obj.surahs) {
+        if (typeof s.number !== "number" || !Array.isArray(s.ayahs)) throw new Error("Invalid surah entry");
+      }
+      DATA = obj;
+      // cache imported surahs too
+      for (const s of DATA.surahs) {
+        try { await idbSet(String(s.number), s); } catch {}
+      }
+      currentSurah = DATA.surahs[0]?.number ?? 1;
+      toast("Imported dataset");
+      renderSurahList();
+      renderVerses(true);
+    } catch (e) {
+      toast("Import failed: " + (e.message || e));
+    } finally {
+      fileInput.value = "";
+    }
+  });
+
+  btnExport.addEventListener("click", () => {
+    const payload = { bookmarks: BOOKMARKS, exported_at: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "quran_bookmarks.json";
+    a.click();
+    toast("Exported bookmarks");
+    setTimeout(() => URL.revokeObjectURL(a.href), 1200);
+  });
+
+  btnReset.addEventListener("click", async () => {
+    localStorage.removeItem(LS_BM);
+    localStorage.removeItem(LS_SET);
+    localStorage.removeItem(LS_META);
+    localStorage.removeItem(LS_ALL);
+    try { await idbClear(); } catch {}
+    DATA = SAMPLE;
+    BOOKMARKS = [];
+    SETTINGS = { font: 26, showTrans: "off", audioMode: "off", audioTpl: "" };
+    currentSurah = 1;
+    toast("Reset complete");
+    applySettingsToUI();
+    renderSurahList();
+    renderVerses(true);
+  });
+
+  btnBookmarks.addEventListener("click", () => {
+    showBookmarksOnly = !showBookmarksOnly;
+    btnBookmarks.textContent = showBookmarksOnly ? "★ On" : "★";
+    toast(showBookmarksOnly ? "Showing bookmarks" : "Back to surahs");
+    renderSurahList();
+    renderVerses(true);
+  });
+
+  // -----------------------
+  // Settings wiring
+  // -----------------------
+  function applySettingsToUI() {
+    elFont.value = String(SETTINGS.font);
+    elShowTrans.value = SETTINGS.showTrans;
+    elAudioMode.value = SETTINGS.audioMode;
+    elAudioTpl.value = SETTINGS.audioTpl || "";
+    setFont(SETTINGS.font);
+    elAudioTplWrap.classList.toggle("hidden", SETTINGS.audioMode !== "templ");
+  }
+
+  elFont.addEventListener("input", () => {
+    SETTINGS.font = Number(elFont.value);
+    setFont(SETTINGS.font);
+    saveSettings();
+  });
+
+  elShowTrans.addEventListener("change", () => {
+    SETTINGS.showTrans = elShowTrans.value;
+    saveSettings();
+    renderVerses(false);
+  });
+
+  elAudioMode.addEventListener("change", () => {
+    SETTINGS.audioMode = elAudioMode.value;
+    elAudioTplWrap.classList.toggle("hidden", SETTINGS.audioMode !== "templ");
+    saveSettings();
+    if (SETTINGS.audioMode === "archive") toast("Archive surah audio enabled");
+    else if (SETTINGS.audioMode === "templ") toast("Set a template for ayah audio");
+    else toast("Audio off");
+  });
+
+  elAudioTpl.addEventListener("input", () => {
+    SETTINGS.audioTpl = elAudioTpl.value;
+    saveSettings();
+  });
+
+  // Search (names only; fast)
+  let searchT = null;
+  elSearch.addEventListener("input", () => {
+    clearTimeout(searchT);
+    searchT = setTimeout(() => renderSurahList(), 120);
+  });
+
+  // -----------------------
+  // Boot: load cached meta if available
+  // -----------------------
+  (async () => {
+    applySettingsToUI();
+
+    const meta = loadMetaList();
+    if (meta && Array.isArray(meta) && meta.length) {
+      applyMetaList(meta);
+      currentSurah = 1;
+      renderSurahList();
+      // If surah 1 cached, show it quickly
+      try {
+        const s1 = await idbGet("1");
+        if (s1) mergeSurahIntoData(s1);
+      } catch {}
+      renderVerses(true);
+      if (localStorage.getItem(LS_ALL) === "1") toast("All 114 cached (offline-ready)");
+      else toast("Surah list loaded (tap a surah to fetch)");
+    } else {
+      DATA = SAMPLE;
+      renderSurahList();
+      renderVerses(true);
+      toast("Tap “Load 114 surahs”");
+    }
+  })();
+
+})();
+</script>
+</body>
+</html>
