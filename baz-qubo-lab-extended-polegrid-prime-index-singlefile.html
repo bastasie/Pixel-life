@@ -1,0 +1,1444 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="theme-color" content="#0b0b0b"/>
+<title>BAZ QUBO Lab — Extended Pole Grid (Prime‑Pole Bus)</title>
+<style>
+  :root{color-scheme:dark}
+  html,body{margin:0;height:100%;background:#070707;color:rgba(255,255,255,.92);
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+  *{box-sizing:border-box}
+  .wrap{max-width:1320px;margin:0 auto;padding:14px 12px 44px}
+  h1{margin:0 0 6px;font-size:18px;font-weight:950;letter-spacing:.2px}
+  p{margin:6px 0 0;opacity:.78;line-height:1.35}
+  .card{margin-top:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);
+    border-radius:18px;padding:12px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:12px;align-items:start}
+  @media(max-width:1020px){.grid{grid-template-columns:1fr}}
+  input,button,select,textarea{
+    appearance:none;border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.35);
+    color:rgba(255,255,255,.92);padding:10px 10px;border-radius:14px;font-weight:850;font-size:13px;outline:none;
+    -webkit-tap-highlight-color:transparent}
+  button{cursor:pointer}
+  button:active{transform:translateY(1px);background:rgba(255,255,255,.08)}
+  textarea{width:100%;min-height:150px;font-weight:800;line-height:1.25;border-radius:16px}
+  .pill{padding:7px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.10);
+    background:rgba(255,255,255,.05);font-size:12px;font-weight:900;opacity:.86;display:flex;gap:8px;align-items:center}
+  canvas{width:100%;height:auto;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:#000}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace}
+  .small{font-size:12px;opacity:.78;line-height:1.35}
+  table{width:100%;border-collapse:collapse}
+  td,th{border-bottom:1px solid rgba(255,255,255,.10);padding:6px 8px;font-size:12px}
+  .ok{color:#9dffb0}
+  .warn{color:#ffd37a}
+  .bad{color:#ff9a9a}
+  .hint{opacity:.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BAZ QUBO Lab — Extended Pole Grid</h1>
+  <p>
+    Scales the prime‑carrier pole bus beyond 9 variables by using <b>banked excitation</b>:
+    only 9 tiles are modulated at a time (9 prime carriers), then the app rotates through banks to cover 16/25/36… variables.
+  </p>
+
+  <div class="card grid">
+    <div>
+      <div class="row">
+        <button id="busStart">Start pole bus</button>
+        <button id="busStop" disabled>Stop</button>
+        <button id="busClear">Clear</button>
+        <button id="export">Export JSON</button>
+        <div class="pill">Status <span id="status">idle</span></div>
+        <div class="pill">FPS <span id="fps">—</span></div>
+        <div class="pill">Touch <span id="touchOk">no</span></div>
+        <div class="pill">Bank <span id="bankInfo">—</span></div>
+      </div>
+
+      <div class="card" style="margin-top:10px">
+        <div class="row">
+          <div class="pill">Grid</div>
+          <select id="gridN">
+            <option value="3">3×3 (9)</option>
+            <option value="4" selected>4×4 (16)</option>
+            <option value="5">5×5 (25)</option>
+            <option value="6">6×6 (36)</option>
+          </select>
+
+          <div class="pill">Bank dwell (s)</div>
+          <input id="dwell" type="number" min="0.05" max="3" step="0.05" value="0.35" style="width:90px">
+
+          <div class="pill">Wave</div>
+          <select id="wave"><option value="square" selected>Square</option><option value="sine">Sine</option></select>
+
+          <div class="pill">Depth</div>
+          <input id="depth" type="range" min="0" max="1" step="0.01" value="1" style="width:180px">
+          <div class="pill mono">d=<span id="dval">1.00</span></div>
+
+          <div class="pill">Touch scalar</div>
+          <select id="sig">
+            <option value="cap" selected>capProxy (pressure×area)</option>
+            <option value="pressure">pressure</option>
+            <option value="speed">speed</option>
+            <option value="x">x</option>
+            <option value="y">y</option>
+          </select>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div class="pill">Lock‑in τ (s)</div>
+          <input id="tau" type="number" min="0.05" max="5" step="0.05" value="0.35" style="width:90px">
+          <div class="pill">GLT α</div>
+          <input id="alpha" type="number" min="0.25" max="4" step="0.05" value="1.00" style="width:95px">
+          <div class="pill">Butter n</div>
+          <select id="order"><option>2</option><option selected>4</option><option>6</option><option>8</option><option>10</option></select>
+          <div class="pill">LP fc (Hz)</div>
+          <input id="fc" type="number" min="0.3" max="30" step="0.1" value="8.0" style="width:90px">
+          <div class="pill">Carriers</div>
+          <button id="recalc">Recalc primes</button>
+        </div>
+
+        <div class="small" style="margin-top:10px">
+          <span class="warn">Scaling rule:</span> only 9 carriers are needed no matter the grid size; we rotate which tiles use them.
+          If pressure/size is hidden, switch scalar to <b>speed</b>.
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:10px">
+        <div class="pill">Prime‑tile surface (banked modulation)</div>
+        <div class="small hint" style="margin-top:8px">
+          Active tiles in the current bank are flickering; inactive tiles sit at mid‑gray. Tile index maps to solver variable xᵢ.
+        </div>
+        <canvas id="surf"></canvas>
+        <div id="read" class="small mono" style="margin-top:8px">—</div>
+      </div>
+
+      <div class="card" style="margin-top:10px">
+        <div class="row">
+          <div class="pill">Problem</div>
+          <select id="problem">
+            <option value="maxcut" selected>MaxCut (graph)</option>
+            <option value="sat">3‑SAT (small)</option>
+            <option value="portfolio">Portfolio (toy)</option>
+            <option value="qubo">Custom QUBO (matrix)</option>
+          </select>
+          <button id="loadSample">Load sample</button>
+
+          <div class="pill">N</div>
+          <div class="pill mono" id="Ndisp">—</div>
+
+          <div class="pill">Solver</div>
+          <button id="solveStart">Start anneal</button>
+          <button id="solveStop" disabled>Stop anneal</button>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div class="pill">Steps/s</div>
+          <input id="rate" type="number" min="10" max="4000" step="10" value="350" style="width:95px">
+          <div class="pill">T₀</div>
+          <input id="T0" type="number" min="0.01" max="80" step="0.01" value="3.0" style="width:90px">
+          <div class="pill">T_end</div>
+          <input id="Tend" type="number" min="0.001" max="80" step="0.001" value="0.25" style="width:90px">
+          <div class="pill">Seconds</div>
+          <input id="secs" type="number" min="1" max="180" step="1" value="14" style="width:90px">
+          <div class="pill">Penalty λ</div>
+          <input id="lam" type="number" min="0" max="500" step="0.5" value="20" style="width:90px">
+        </div>
+
+        <div class="small" style="margin-top:10px">
+          Targets are reduced to QUBO: minimize <span class="mono">xᵀ Q x</span>, x∈{0,1}ⁿ.
+          (SAT uses a quadratic surrogate penalty; it’s a practical embedding, not a perfect clause‑exact polynomial.)
+        </div>
+
+        <div class="card" style="margin-top:10px">
+          <div class="pill">Problem input</div>
+          <textarea id="input" class="mono" spellcheck="false"></textarea>
+          <div class="small" style="margin-top:8px">
+            <span class="warn">Formatting:</span>
+            MaxCut uses edge list "i j w" (0‑indexed). SAT uses clauses "a b c" where literals are ±(varIndex+1).
+            Custom QUBO uses JSON matrix [[..],[..],..] of size N.
+          </div>
+        </div>
+      </div>
+    </div>
+      <div class="card" style="margin-top:10px">
+        <div class="row">
+          <div class="pill">Prime index predictor</div>
+          <div class="pill">Exact output</div>
+        </div>
+        <div class="small" style="margin-top:8px">
+          Compute the prime at a specific index <span class="mono">p(n)</span> (1-indexed: p(1)=2). Uses a guaranteed upper bound and a segmented sieve.
+          The pole-bus vector is used only as a <b>physical noise seed</b> for diagnostics and optional ordering — the computed prime is exact.
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div class="pill">n</div>
+          <input id="primeN" type="number" min="1" max="2000000" step="1" value="10000" style="width:140px">
+          <div class="pill">Method</div>
+          <select id="primeMethod">
+            <option value="seg" selected>Segmented sieve (fast, exact)</option>
+            <option value="inc">Incremental MR (64-bit exact, slower)</option>
+          </select>
+          <button id="primeGo">Compute p(n)</button>
+          <button id="primeStop" disabled>Stop</button>
+        </div>
+
+        <div class="card" style="margin-top:10px">
+          <div class="pill">Result</div>
+          <div class="small mono" id="primeOut" style="margin-top:8px">—</div>
+          <div class="small hint" style="margin-top:6px">
+            Tip: keep <b>grid 4×4</b> or smaller if you want the pole bus running while sieving; big grids + high steps/s can heat the CPU.
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:10px">
+          <div class="pill">Progress</div>
+          <div class="small mono" id="primeProg" style="margin-top:8px">—</div>
+        </div>
+      </div>
+
+
+    <div>
+      <div class="row" style="justify-content:space-between">
+        <div class="pill">Live vectors</div>
+        <div class="pill">A across all tiles (decayed hold)</div>
+      </div>
+
+      <div class="card" style="margin-top:10px">
+        <div class="pill">Pole vector A (all tiles)</div>
+        <div class="small mono" id="avec" style="margin-top:8px">—</div>
+        <div class="pill" style="margin-top:10px">Seed</div>
+        <div class="small mono" id="seed" style="margin-top:8px">—</div>
+        <div class="small hint" style="margin-top:8px">
+          Because banks rotate, non‑active tiles are held with exponential decay; you still get a full N‑vector.
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:10px">
+        <div class="row" style="justify-content:space-between">
+          <div class="pill">Solver status</div>
+          <div class="pill">Best E <span id="bestE">—</span></div>
+        </div>
+        <div class="small mono" id="sol" style="margin-top:8px">—</div>
+      </div>
+
+      <div class="row" style="justify-content:space-between">
+      <div class="card" style="margin-top:10px">
+        <div class="row" style="justify-content:space-between">
+          <div class="pill">Radio / antenna telemetry</div>
+          <div class="pill">Web limits</div>
+        </div>
+        <div class="small" style="margin-top:8px">
+          Browsers do <b>not</b> expose “antenna voltages” or raw RF front‑end readings for Wi‑Fi/Cellular. That data is locked behind the OS/baseband for security and privacy.
+          What we <i>can</i> do here is:
+          <br>1) show available <span class="mono">Network Information</span> metrics, and/or
+          <br>2) read real millivolt values from an <b>external RF/antenna sensor</b> over <b>Web Bluetooth</b> or <b>WebUSB</b>.
+        </div>
+
+        <div class="card" style="margin-top:10px">
+          <div class="pill">Connection proxy metrics</div>
+          <div class="small mono" id="netInfo" style="margin-top:8px">—</div>
+          <div class="small hint" style="margin-top:6px">
+            If your device doesn’t support the API, this will stay blank. These are proxies (downlink/RTT/effective type), not RF voltages.
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:10px">
+          <div class="row">
+            <div class="pill">External sensor</div>
+            <button id="bleConnect">Connect BLE sensor</button>
+            <button id="bleDisconnect" disabled>Disconnect</button>
+          </div>
+
+          <div class="row" style="margin-top:10px">
+            <div class="pill">Service UUID</div>
+            <input id="bleSvc" class="mono" value="0000bazz-0000-1000-8000-00805f9b34fb" style="width:290px">
+          </div>
+          <div class="row" style="margin-top:8px">
+            <div class="pill">Characteristic UUID</div>
+            <input id="bleChr" class="mono" value="0000baza-0000-1000-8000-00805f9b34fb" style="width:290px">
+          </div>
+
+          <div class="small" style="margin-top:8px">
+            Expected payload formats:
+            <br>• <span class="mono">uint16 mV</span> (little‑endian), OR
+            <br>• ASCII text like <span class="mono">"1234"</span> (mV), OR CSV <span class="mono">"v1,v2,..."</span>.
+          </div>
+
+          <div class="card" style="margin-top:10px">
+            <div class="pill">Sensor volts (mV)</div>
+            <div class="small mono" id="bleRead" style="margin-top:8px">—</div>
+            <div class="small hint" style="margin-top:6px">
+              This is the only way to get real “antenna voltages” inside a web app: measure them externally and stream them in.
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+        <div class="pill">Trace</div>
+        <div class="pill">raw <span class="mono">orange</span> / filtered <span class="mono">white</span> / mean(A_active) <span class="mono">green</span></div>
+      </div>
+      <canvas id="plot" width="900" height="420" style="margin-top:10px"></canvas>
+
+      <div class="card" style="margin-top:10px">
+        <div class="pill">Carriers (9)</div>
+        <table class="mono" style="margin-top:8px">
+          <thead><tr><th>k</th><th>prime f (Hz)</th></tr></thead>
+          <tbody id="ftable"></tbody>
+        </table>
+        <div class="small warn" style="margin-top:8px">
+          These 9 primes are reused across banks; bank index selects which tiles they drive.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $=(id)=>document.getElementById(id);
+  const surf=$("surf"), plot=$("plot");
+  const ctx=surf.getContext("2d");
+  const ctxP=plot.getContext("2d");
+  const statusEl=$("status"), fpsEl=$("fps"), readEl=$("read"), avecEl=$("avec"), seedEl=$("seed"), ftable=$("ftable");
+  const touchOkEl=$("touchOk"), bankInfoEl=$("bankInfo"), bestEEl=$("bestE"), solEl=$("sol"), Ndisp=$("Ndisp");
+
+  const dslider=$("depth"), dval=$("dval");
+  dslider.oninput=()=>dval.textContent=parseFloat(dslider.value).toFixed(2);
+  dval.textContent=parseFloat(dslider.value).toFixed(2);
+
+  function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+
+  // ===== Touch state =====
+  const pointers=new Map();
+  let t0=null;
+  function localXY(e){
+    const r=surf.getBoundingClientRect();
+    return {x: clamp((e.clientX-r.left)/r.width,0,1), y: clamp((e.clientY-r.top)/r.height,0,1)};
+  }
+  function pressureFrom(e){
+    const p=(typeof e.pressure==="number" && e.pressure>0) ? e.pressure : null;
+    return p==null?null:clamp(p,0,1);
+  }
+  function whFrom(e){
+    const w=(typeof e.width==="number" && e.width>0) ? e.width : null;
+    const h=(typeof e.height==="number" && e.height>0) ? e.height : null;
+    return {w,h};
+  }
+  function areaFrom(w,h){
+    if(w==null||h==null) return null;
+    return Math.PI*(w*0.5)*(h*0.5);
+  }
+  function capProxy(p,a){
+    if(p==null||a==null) return null;
+    return (p*a)/400.0;
+  }
+  function updatePointer(e, kind){
+    const now=performance.now()/1000;
+    if(t0==null) t0=now;
+    const t=now-t0;
+    const {x,y}=localXY(e);
+    const prev=pointers.get(e.pointerId);
+    const dt=prev ? Math.max(1e-6, t-prev.t) : 1/60;
+    const dx=prev ? (x-prev.x) : 0;
+    const dy=prev ? (y-prev.y) : 0;
+    const vx=dx/dt, vy=dy/dt, speed=Math.hypot(vx,vy);
+    const p=pressureFrom(e);
+    const {w,h}=whFrom(e);
+    const a=areaFrom(w,h);
+    const cap=capProxy(p,a);
+    pointers.set(e.pointerId, {t,kind,id:e.pointerId,x,y,vx,vy,speed,pressure:p,width:w,height:h,area:a,cap});
+  }
+  function choosePointer(){
+    if(pointers.size===0) return null;
+    let best=null;
+    for(const st of pointers.values()) if(!best || st.t>best.t) best=st;
+    return best;
+  }
+  surf.addEventListener("pointerdown",(e)=>{ surf.setPointerCapture(e.pointerId); updatePointer(e,"down"); });
+  surf.addEventListener("pointermove",(e)=>{ updatePointer(e,"move"); });
+  surf.addEventListener("pointerup",(e)=>{ updatePointer(e,"up"); pointers.delete(e.pointerId); });
+  surf.addEventListener("pointercancel",(e)=>{ updatePointer(e,"cancel"); pointers.delete(e.pointerId); });
+
+  // ===== Resize =====
+  function resizeSurf(){
+    const r=surf.getBoundingClientRect();
+    const dpr=window.devicePixelRatio||1;
+    surf.width=Math.round(r.width*dpr);
+    surf.height=Math.round(r.height*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener("resize", resizeSurf);
+  setTimeout(resizeSurf,0);
+
+  // ===== GLT‑Butter LP =====
+  function onePoleLPStep(y, x, fs, fc, alpha){
+    const dt=1/fs;
+    const fce = Math.pow(Math.max(1e-6, fc), alpha);
+    const RC = 1/(2*Math.PI*fce);
+    const a = dt/(RC+dt);
+    return y + a*(x - y);
+  }
+  function butterCascadeLP(x, state, fs, fc, orderN, alpha){
+    const m = Math.max(1, Math.round(orderN/2));
+    if(state.length!==m){ state.length=0; for(let i=0;i<m;i++) state.push(0); }
+    let v=x;
+    for(let i=0;i<m;i++){
+      state[i]=onePoleLPStep(state[i], v, fs, fc, alpha);
+      v=state[i];
+    }
+    return v;
+  }
+
+  // ===== Lock‑in =====
+  function lockInUpdate(li, x, t, f, tau, dt){
+    const a = dt/(tau+dt);
+    const ang=2*Math.PI*f*t;
+    const c=Math.cos(ang), s=Math.sin(ang);
+    li.I = li.I + a*(x*c - li.I);
+    li.Q = li.Q + a*(x*s - li.Q);
+    li.A = Math.hypot(li.I, li.Q);
+  }
+
+  // ===== Carriers (9 primes) =====
+  const PRIMES=[2,3,5,7,11,13,17,19,23,29,31,37,41,43];
+  let carriers=[5,7,11,13,17,19,23,29,31];
+  function recalcCarriers(fps){
+    const fmax = Math.min(45, 0.45*fps);
+    const pool = PRIMES.filter(p=>p>=5 && p<=fmax);
+    carriers = pool.slice(0,9);
+    while(carriers.length<9) carriers.push(pool[pool.length-1] || 11);
+    renderCarrierTable();
+  }
+  function renderCarrierTable(){
+    ftable.innerHTML="";
+    for(let i=0;i<9;i++){
+      const tr=document.createElement("tr");
+      const td1=document.createElement("td"); td1.textContent=`${i}`;
+      const td2=document.createElement("td"); td2.textContent=carriers[i].toFixed(0);
+      tr.appendChild(td1); tr.appendChild(td2);
+      ftable.appendChild(tr);
+    }
+  }
+  renderCarrierTable();
+  $("recalc").onclick=()=>{ recalcCarriers(fpsEst||60); resetBank(); };
+
+  // ===== Grid + bank mapping =====
+  function gridSize(){ return parseInt($("gridN").value,10); }
+  function Nvars(){ const g=gridSize(); return g*g; }
+  function banksCount(N){ return Math.ceil(N/9); }
+
+  // bankTiles[b] = array of tile indices (0..N-1) in bank b (<=9)
+  function buildBanks(N){
+    const B=banksCount(N);
+    const banks=[];
+    for(let b=0;b<B;b++){
+      const arr=[];
+      for(let k=0;k<9;k++){
+        const idx=b*9+k;
+        if(idx<N) arr.push(idx);
+      }
+      banks.push(arr);
+    }
+    return banks;
+  }
+
+  function tileRect(i, g, W, H){
+    const r=Math.floor(i/g), c=i%g;
+    return {x:c*(W/g), y:r*(H/g), w:W/g, h:H/g};
+  }
+
+  // Active bank changes every dwell seconds
+  let bankIdx=0;
+  let bankT=0;
+  let banks=buildBanks(Nvars());
+
+  function updateNUI(){
+    const N=Nvars();
+    Ndisp.textContent = `${N}`;
+    banks=buildBanks(N);
+    bankIdx = bankIdx % banks.length;
+  }
+  $("gridN").onchange=()=>{ updateNUI(); loadSample(); resetAllVectors(); };
+  updateNUI();
+
+  // ===== Full pole vectors across all tiles =====
+  let poleA=[]; let poleI=[]; let poleQ=[];
+  function resetAllVectors(){
+    const N=Nvars();
+    poleA=new Array(N).fill(0);
+    poleI=new Array(N).fill(0);
+    poleQ=new Array(N).fill(0);
+  }
+  resetAllVectors();
+
+  // Decay for inactive tiles (per second)
+  const DECAY_PER_S = 0.85;
+
+  // ===== Draw surface with banked modulation =====
+  function drawSurface(t, g, activeTiles, fps){
+    const W=surf.getBoundingClientRect().width;
+    const H=surf.getBoundingClientRect().height;
+    const wave=$("wave").value;
+    const depth=parseFloat($("depth").value);
+
+    ctx.clearRect(0,0,W,H);
+
+    // quick lookup: tile -> k carrier index, else -1
+    const map=new Map();
+    for(let k=0;k<activeTiles.length;k++) map.set(activeTiles[k], k);
+
+    // background mid-gray
+    ctx.fillStyle="rgb(128,128,128)";
+    ctx.fillRect(0,0,W,H);
+
+    for(let i=0;i<g*g;i++){
+      const rect=tileRect(i,g,W,H);
+      const k = map.has(i) ? map.get(i) : -1;
+
+      if(k>=0){
+        const f=carriers[k];
+        const ph=2*Math.PI*f*t;
+        let m=0.5;
+        if(wave==="square") m=(Math.sin(ph)>=0)?1:0;
+        else m=0.5+0.5*Math.sin(ph);
+        m=0.5 + depth*(m-0.5);
+        const v=Math.round(255*m);
+        ctx.fillStyle=`rgb(${v},${v},${v})`;
+        ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+
+        ctx.fillStyle="rgba(0,0,0,0.68)";
+        ctx.font="11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace";
+        ctx.fillText(`${f}Hz`, rect.x+6, rect.y+14);
+      } else {
+        ctx.fillStyle="rgba(0,0,0,0.12)";
+        ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+      }
+
+      ctx.strokeStyle="rgba(0,0,0,0.35)";
+      ctx.lineWidth=2;
+      ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+
+      ctx.fillStyle="rgba(0,0,0,0.55)";
+      ctx.font="11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace";
+      ctx.fillText(`${i}`, rect.x+6, rect.y+rect.h-8);
+    }
+  }
+
+  // ===== Touch scalar =====
+  function touchScalar(){
+    const st=choosePointer();
+    const mode=$("sig").value;
+    if(!st) return {x:0, st:null};
+    let v=0;
+    if(mode==="cap") v=(st.cap!=null)?st.cap:0;
+    else if(mode==="pressure") v=(st.pressure!=null)?st.pressure:0;
+    else if(mode==="speed") v=st.speed;
+    else if(mode==="x") v=st.x;
+    else if(mode==="y") v=st.y;
+    return {x:v, st};
+  }
+
+  // ===== Plot =====
+  const rawBuf=[], filtBuf=[], meanABuf=[];
+  const maxKeep=900;
+  function drawTraces(raw, filt, meanA){
+    const W=plot.width, H=plot.height;
+    ctxP.fillStyle="#000"; ctxP.fillRect(0,0,W,H);
+    const N=raw.length;
+    if(N<4) return;
+    let mn=Infinity,mx=-Infinity;
+    for(let i=0;i<N;i++){
+      for(const v of [raw[i],filt[i],meanA[i]]){
+        if(!isFinite(v)) continue;
+        if(v<mn) mn=v;
+        if(v>mx) mx=v;
+      }
+    }
+    if(!isFinite(mn)||!isFinite(mx)||mn===mx){ mn-=1; mx+=1; }
+    const pad=22;
+    const xmap=i=>pad+i/(N-1)*(W-2*pad);
+    const ymap=v=>(H-pad)-(v-mn)/(mx-mn)*(H-2*pad);
+
+    ctxP.strokeStyle="rgba(255,255,255,0.10)"; ctxP.lineWidth=1;
+    ctxP.beginPath(); ctxP.moveTo(pad,H/2); ctxP.lineTo(W-pad,H/2); ctxP.stroke();
+
+    ctxP.strokeStyle="rgba(255,211,122,0.75)"; ctxP.lineWidth=2;
+    ctxP.beginPath(); ctxP.moveTo(xmap(0),ymap(raw[0])); for(let i=1;i<N;i++) ctxP.lineTo(xmap(i),ymap(raw[i])); ctxP.stroke();
+
+    ctxP.strokeStyle="rgba(255,255,255,0.70)"; ctxP.lineWidth=2;
+    ctxP.beginPath(); ctxP.moveTo(xmap(0),ymap(filt[0])); for(let i=1;i<N;i++) ctxP.lineTo(xmap(i),ymap(filt[i])); ctxP.stroke();
+
+    ctxP.strokeStyle="rgba(157,255,176,0.92)"; ctxP.lineWidth=2;
+    ctxP.beginPath(); ctxP.moveTo(xmap(0),ymap(meanA[0])); for(let i=1;i<N;i++) ctxP.lineTo(xmap(i),ymap(meanA[i])); ctxP.stroke();
+
+    ctxP.fillStyle="rgba(255,255,255,0.72)";
+    ctxP.font="12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace";
+    ctxP.fillText("raw / GLT‑Butter LP / mean A(active bank)", pad, 14);
+  }
+
+  // ===== RNG (physical-seeded, not crypto) =====
+  let rngState=0x12345678>>>0;
+  function mix32(x){
+    x ^= x >>> 16; x = Math.imul(x, 0x7feb352d);
+    x ^= x >>> 15; x = Math.imul(x, 0x846ca68b);
+    x ^= x >>> 16;
+    return x>>>0;
+  }
+  function xorshift32(){
+    let x=rngState>>>0;
+    x ^= x<<13; x >>>=0;
+    x ^= x>>>17; x >>>=0;
+    x ^= x<<5; x >>>=0;
+    rngState=x>>>0;
+    return x>>>0;
+  }
+  function rand01(){ return (xorshift32()>>>0) / 4294967296; }
+
+  function seedFromActiveBank(activeTiles, liBank){
+    let acc=0;
+    for(let k=0;k<activeTiles.length;k++){
+      const tile=activeTiles[k];
+      const I=liBank[k]?.I || 0;
+      const Q=liBank[k]?.Q || 0;
+      const A=liBank[k]?.A || 0;
+      const qi = (Math.floor(I*1e6) ^ Math.floor(Q*1e6))|0;
+      const qa = (Math.floor(A*1e6))|0;
+      acc ^= mix32((qi ^ (qa<<1))>>>0) ^ mix32((tile*0x9e3779b9)>>>0);
+    }
+    return acc>>>0;
+  }
+
+  // ===== QUBO engine =====
+  function zeros(n){ return Array.from({length:n},()=>Array(n).fill(0)); }
+  function energy(Q, x){
+    const n=x.length;
+    let E=0;
+    for(let i=0;i<n;i++){
+      if(!x[i]) continue;
+      E += Q[i][i];
+      for(let j=i+1;j<n;j++) if(x[j]) E += (Q[i][j] + Q[j][i]);
+    }
+    return E;
+  }
+  function deltaFlip(Q, x, k){
+    const n=x.length;
+    const xk=x[k]?1:0;
+    let d = (1-2*xk)*Q[k][k];
+    for(let j=0;j<n;j++){
+      if(j===k) continue;
+      const xj = x[j]?1:0;
+      const c = Q[k][j] + Q[j][k];
+      d += (1-2*xk) * c * xj;
+    }
+    return d;
+  }
+
+  // MaxCut
+  function parseEdgeList(txt){
+    const edges=[];
+    const lines=txt.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    for(const line of lines){
+      const parts=line.split(/[\s,]+/).filter(Boolean);
+      if(parts.length<2) continue;
+      const i=parseInt(parts[0],10), j=parseInt(parts[1],10);
+      const w=parts.length>=3 ? parseFloat(parts[2]) : 1;
+      if(Number.isFinite(i)&&Number.isFinite(j)&&Number.isFinite(w)) edges.push([i,j,w]);
+    }
+    return edges;
+  }
+  function quboMaxCut(n, edges){
+    const Q=zeros(n);
+    for(const [i,j,w] of edges){
+      if(i<0||j<0||i>=n||j>=n||i===j) continue;
+      Q[i][i] += -w;
+      Q[j][j] += -w;
+      Q[i][j] += w; Q[j][i] += w; // (Qij+Qji)=2w
+    }
+    return Q;
+  }
+
+  // 3-SAT surrogate
+  function parseSATClauses(txt){
+    const clauses=[];
+    const lines=txt.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    for(const line of lines){
+      const parts=line.split(/[\s,]+/).filter(Boolean).map(x=>parseInt(x,10));
+      if(parts.length===0) continue;
+      const lits=parts.slice(0,3).filter(v=>v!==0 && Number.isFinite(v));
+      if(lits.length>0) clauses.push(lits);
+    }
+    return clauses;
+  }
+  function quboSAT(n, clauses, lam){
+    const Q=zeros(n);
+    function addPairPenalty(la, lb, w){
+      const mapLit = (lit)=>({idx:Math.abs(lit)-1, pos:lit>0});
+      const A=mapLit(la), B=mapLit(lb);
+      if(A.idx<0||B.idx<0||A.idx>=n||B.idx>=n) return;
+
+      // -ta -tb
+      Q[A.idx][A.idx] += (A.pos? -w : +w);
+      Q[B.idx][B.idx] += (B.pos? -w : +w);
+
+      // +ta*tb
+      const i=A.idx, j=B.idx;
+      let q = 0;
+      if(A.pos && B.pos){ q = +w; }
+      else if(A.pos && !B.pos){ q = -w; Q[i][i] += +w; }
+      else if(!A.pos && B.pos){ q = -w; Q[j][j] += +w; }
+      else { q = +w; Q[i][i] += -w; Q[j][j] += -w; }
+      Q[i][j] += q/2; Q[j][i] += q/2;
+    }
+    for(const clause of clauses){
+      const lits=[clause[0], clause[1] ?? 0, clause[2] ?? 0].filter(v=>v!==0);
+      if(lits.length<2) continue;
+      const w = lam/2;
+      for(let a=0;a<lits.length;a++) for(let b=a+1;b<lits.length;b++) addPairPenalty(lits[a], lits[b], w);
+    }
+    return Q;
+  }
+
+  // Portfolio toy, sized to N (up to 36)
+  function quboPortfolioToy(n, lam){
+    const K=Math.max(2, Math.round(n/3));
+    const Q=zeros(n);
+    // deterministic pseudo “risk/return” so scaling works offline
+    for(let i=0;i<n;i++){
+      const ret = 0.04 + 0.10 * ((Math.sin((i+1)*12.9898)+1)/2);
+      const risk= 0.05 + 0.25 * ((Math.cos((i+1)*78.233)+1)/2);
+      const mu=4.0;
+      Q[i][i] += risk - mu*ret;
+    }
+    // cardinality penalty lam*(sum-K)^2
+    for(let i=0;i<n;i++) Q[i][i] += lam*(1 - 2*K);
+    for(let i=0;i<n;i++){
+      for(let j=i+1;j<n;j++){
+        Q[i][j] += lam; Q[j][i] += lam;
+      }
+    }
+    return Q;
+  }
+
+  function parseQuboMatrix(txt, n){
+    try{
+      const M=JSON.parse(txt);
+      if(!Array.isArray(M)) return null;
+      const Q=zeros(n);
+      for(let i=0;i<n;i++) for(let j=0;j<n;j++) Q[i][j]=Number(M[i]?.[j] ?? 0);
+      return Q;
+    } catch { return null; }
+  }
+
+  function buildProblem(){
+    const n=Nvars();
+    const mode=$("problem").value;
+    const lam=parseFloat($("lam").value);
+    const txt=$("input").value || "";
+    if(mode==="maxcut"){
+      const edges=parseEdgeList(txt);
+      return {mode, n, Q:quboMaxCut(n, edges), meta:{edges}};
+    }
+    if(mode==="sat"){
+      const clauses=parseSATClauses(txt);
+      return {mode, n, Q:quboSAT(n, clauses, lam), meta:{clauses, lam}};
+    }
+    if(mode==="portfolio"){
+      return {mode, n, Q:quboPortfolioToy(n, lam), meta:{lam}};
+    }
+    if(mode==="qubo"){
+      const Q=parseQuboMatrix(txt, n);
+      if(!Q) return {mode, n, Q:zeros(n), meta:{error:"Invalid JSON matrix"}};
+      return {mode, n, Q, meta:{}};
+    }
+    return {mode, n, Q:zeros(n), meta:{}};
+  }
+
+  function decodeSolution(prob, x){
+    if(prob.mode==="maxcut"){
+      const L=[], R=[];
+      for(let i=0;i<prob.n;i++) (x[i]?R:L).push(i);
+      return `Cut: L={${L.join(",")}}  R={${R.join(",")}}`;
+    }
+    if(prob.mode==="sat"){
+      const assigns=[];
+      for(let i=0;i<prob.n;i++) assigns.push(`v${i+1}=${x[i]?1:0}`);
+      return `Assignment: ${assigns.join(" ")}`;
+    }
+    if(prob.mode==="portfolio"){
+      const chosen=[];
+      for(let i=0;i<prob.n;i++) if(x[i]) chosen.push(i);
+      return `Chosen assets: {${chosen.join(",")}} (count=${chosen.length})`;
+    }
+    return `x=${x.map(b=>b?1:0).join("")}`;
+  }
+
+  function loadSample(){
+    const mode=$("problem").value;
+    const n=Nvars();
+    if(mode==="maxcut"){
+      // build a sparse sample graph for current N
+      const lines=[];
+      for(let i=0;i<Math.min(n,12);i++){
+        const j=(i+1)%n;
+        lines.push(`${i} ${j} 1`);
+        if(i+2<n) lines.push(`${i} ${i+2} 1`);
+      }
+      // add a few random-ish chords
+      for(let k=0;k<Math.min(10,n);k++){
+        const i=(k*3)%n, j=(k*7+2)%n;
+        if(i!==j) lines.push(`${i} ${j} 1`);
+      }
+      $("input").value = lines.join("\n");
+    } else if(mode==="sat"){
+      // keep clauses small; if n is big, we still only use lower vars
+      $("input").value =
+`1 2 3
+-1 2 -3
+-2 -3 4
+-4 5 6
+-5 -6 1
+-1 -2 -6`;
+    } else if(mode==="portfolio"){
+      $("input").value = `Toy portfolio: choose about N/3 assets. Objective = risk - mu*return + λ(sum-K)^2`;
+    } else if(mode==="qubo"){
+      // generate a symmetric Q
+      const Q=zeros(n);
+      for(let i=0;i<n;i++){
+        Q[i][i]= (i%2? -1.0 : 0.7);
+        for(let j=i+1;j<n;j++){
+          const v = (((i+j)%5)===0)? 0.55 : -0.15;
+          Q[i][j]=v; Q[j][i]=v;
+        }
+      }
+      $("input").value = JSON.stringify(Q);
+    }
+  }
+  $("loadSample").onclick=loadSample;
+  $("problem").onchange=loadSample;
+  loadSample();
+
+  // ===== Bus loop state =====
+  let busRunning=false;
+  let raf=0;
+  let lastNow=0;
+  let fpsEst=60;
+
+  let bState=[];
+  let liBank=[]; // lock-ins for 9 carriers
+
+  function resetBank(){
+    bState=[];
+    liBank = carriers.map(()=>({I:0,Q:0,A:0}));
+  }
+
+  function resetAll(){
+    rawBuf.length=0; filtBuf.length=0; meanABuf.length=0;
+    t0=null; lastNow=0; fpsEst=60;
+    bankIdx=0; bankT=0;
+    resetAllVectors();
+    resetBank();
+    bestEEl.textContent="—";
+    solEl.textContent="—";
+  }
+
+  function renderFullAvec(){
+    const n=Nvars();
+    const parts=[];
+    const maxShow = Math.min(n, 36);
+    for(let i=0;i<maxShow;i++) parts.push(`${i}:${poleA[i].toFixed(4)}`);
+    avecEl.textContent = parts.join("  ");
+    // seed display uses current bank + global decay values
+    let acc=0;
+    for(let i=0;i<Math.min(n,36);i++){
+      acc ^= mix32((Math.floor(poleA[i]*1e6) ^ (i*0x9e3779b9))>>>0);
+    }
+    seedEl.textContent = `bankSeed=${(rngState>>>0).toString(16).padStart(8,"0")}  vecChecksum=${acc.toString(16).padStart(8,"0")}`;
+  }
+
+  function tick(nowMs){
+    if(!busRunning) return;
+    const now=nowMs/1000;
+    if(lastNow===0) lastNow=now;
+    const dt=Math.max(1e-6, now-lastNow);
+    lastNow=now;
+    fpsEst = 0.95*fpsEst + 0.05*(1/dt);
+    fpsEl.textContent = fpsEst.toFixed(1);
+
+    if(t0==null) t0=now;
+    const t = now-t0;
+
+    // auto carriers early
+    if(t<1.5 && rawBuf.length<10){
+      recalcCarriers(fpsEst);
+      resetBank();
+    }
+
+    const N=Nvars();
+    if(poleA.length!==N) resetAllVectors();
+    if(banks.length!==banksCount(N)) banks=buildBanks(N);
+
+    // bank switching
+    const dwell=parseFloat($("dwell").value);
+    bankT += dt;
+    if(bankT >= Math.max(0.02, dwell)){
+      bankT = 0;
+      bankIdx = (bankIdx + 1) % banks.length;
+      // reset lock-in state each bank change to avoid cross-bank mixing
+      resetBank();
+    }
+    const activeTiles=banks[bankIdx] || [];
+    bankInfoEl.textContent = `${bankIdx+1}/${banks.length}  (tiles ${activeTiles[0] ?? "—"}..${activeTiles[activeTiles.length-1] ?? "—"})`;
+
+    const g=gridSize();
+    drawSurface(t, g, activeTiles, fpsEst);
+
+    const {x, st} = touchScalar();
+
+    // touch UI
+    const touchActive=(st!=null);
+    touchOkEl.textContent = touchActive ? "yes" : "no";
+    touchOkEl.className = touchActive ? "ok" : "bad";
+
+    const alpha=parseFloat($("alpha").value);
+    const orderN=parseInt($("order").value,10);
+    const fc=parseFloat($("fc").value);
+    const xf = butterCascadeLP(x, bState, fpsEst, fc, orderN, alpha);
+
+    const tau=parseFloat($("tau").value);
+
+    // decay all tile amplitudes gently
+    const decay = Math.pow(DECAY_PER_S, dt);
+    for(let i=0;i<N;i++){
+      poleA[i] *= decay;
+      poleI[i] *= decay;
+      poleQ[i] *= decay;
+    }
+
+    // update lock-ins only for active bank tiles
+    for(let k=0;k<activeTiles.length;k++){
+      const f=carriers[k];
+      lockInUpdate(liBank[k], xf, t, f, tau, dt);
+      const tile=activeTiles[k];
+      // write into global vectors
+      poleA[tile]=liBank[k].A;
+      poleI[tile]=liBank[k].I;
+      poleQ[tile]=liBank[k].Q;
+    }
+
+    const meanA = activeTiles.reduce((s,tile)=>s+(poleA[tile]||0),0) / Math.max(1, activeTiles.length);
+
+    rawBuf.push(x); filtBuf.push(xf); meanABuf.push(meanA);
+    if(rawBuf.length>maxKeep){ rawBuf.shift(); filtBuf.shift(); meanABuf.shift(); }
+
+    if(st){
+      readEl.textContent = `x=${st.x.toFixed(3)} y=${st.y.toFixed(3)}  pressure=${st.pressure?.toFixed(3) ?? "—"}  area=${st.area?.toFixed(1) ?? "—"}  cap=${st.cap?.toFixed(5) ?? "—"}  speed=${st.speed.toFixed(3)}  raw=${x.toFixed(6)}`;
+    } else {
+      readEl.textContent = `no pointer  raw=${x.toFixed(6)}`;
+    }
+
+    // seed RNG from this bank's I/Q/A
+    const bankSeed = seedFromActiveBank(activeTiles, liBank);
+    rngState = mix32(rngState ^ bankSeed ^ (bankIdx*0x9e3779b9>>>0));
+    renderFullAvec();
+    drawTraces(rawBuf, filtBuf, meanABuf);
+
+    raf=requestAnimationFrame(tick);
+  }
+
+  function startBus(){
+    if(busRunning) return;
+    busRunning=true;
+    statusEl.textContent="running";
+    $("busStart").disabled=true;
+    $("busStop").disabled=false;
+    resetAll();
+    raf=requestAnimationFrame(tick);
+  }
+  function stopBus(){
+    busRunning=false;
+    statusEl.textContent="stopped";
+    $("busStart").disabled=false;
+    $("busStop").disabled=true;
+    try{ cancelAnimationFrame(raf);}catch{}
+  }
+  function clearAll(){
+    resetAll();
+    readEl.textContent="—"; avecEl.textContent="—"; seedEl.textContent="—";
+    ctxP.fillStyle="#000"; ctxP.fillRect(0,0,plot.width,plot.height);
+    ctx.fillStyle="#000"; ctx.fillRect(0,0,surf.width,surf.height);
+  }
+
+  $("busStart").onclick=startBus;
+  $("busStop").onclick=stopBus;
+  $("busClear").onclick=clearAll;
+
+  // ===== Annealer =====
+  let solveRunning=false;
+  let solveTimer=null;
+  let best={E:Infinity, x:null, t:0, steps:0};
+  let current={x:null, E:0};
+
+  function seedFromVectorForSolver(n){
+    let acc=0;
+    for(let i=0;i<Math.min(n, poleA.length);i++){
+      const v = Math.floor((poleA[i]||0)*1e6) ^ Math.floor((poleI[i]||0)*1e6) ^ Math.floor((poleQ[i]||0)*1e6);
+      acc ^= mix32((v ^ (i*0x9e3779b9))>>>0);
+    }
+    return acc>>>0;
+  }
+
+  function startAnneal(){
+    if(solveRunning) return;
+    const prob=buildProblem();
+    if(prob.meta?.error){
+      solEl.textContent = `Problem error: ${prob.meta.error}`;
+      return;
+    }
+    const n=prob.n;
+    const Q=prob.Q;
+
+    current.x = Array.from({length:n}, ()=> (rand01()<0.5));
+    current.E = energy(Q, current.x);
+    best={E:current.E, x:current.x.slice(), t:0, steps:0};
+    bestEEl.textContent = best.E.toFixed(6);
+    solEl.textContent = `${decodeSolution(prob, best.x)}\n` +
+                        `bestE=${best.E.toFixed(6)}  steps=0\n` +
+                        `x=${best.x.map(b=>b?1:0).join("")}`;
+
+    solveRunning=true;
+    $("solveStart").disabled=true;
+    $("solveStop").disabled=false;
+
+    const rate=parseInt($("rate").value,10);
+    const secs=parseFloat($("secs").value);
+    const stepsTotal=Math.max(1, Math.floor(rate*secs));
+    const T0=parseFloat($("T0").value);
+    const Tend=parseFloat($("Tend").value);
+
+    const startTs=performance.now();
+    let s=0;
+
+    solveTimer=setInterval(()=>{
+      if(!solveRunning) return;
+
+      // mix in physical vector state continuously
+      const svec = seedFromVectorForSolver(n);
+      rngState = mix32(rngState ^ svec ^ (s*2654435761>>>0));
+
+      const frac = s/Math.max(1, stepsTotal-1);
+      const T = T0 * Math.pow(Tend/T0, frac);
+
+      const k = (xorshift32() % n) >>> 0;
+      const dE = deltaFlip(Q, current.x, k);
+
+      let accept=false;
+      if(dE <= 0) accept=true;
+      else {
+        const p = Math.exp(-dE/Math.max(1e-9, T));
+        if(rand01() < p) accept=true;
+      }
+
+      if(accept){
+        current.x[k] = !current.x[k];
+        current.E += dE;
+        if(current.E < best.E){
+          best.E = current.E;
+          best.x = current.x.slice();
+          best.steps = s;
+          best.t = (performance.now()-startTs)/1000;
+          bestEEl.textContent = best.E.toFixed(6);
+          solEl.textContent =
+            `${decodeSolution(prob, best.x)}\n` +
+            `bestE=${best.E.toFixed(6)}  steps=${best.steps}  t=${best.t.toFixed(2)}s\n` +
+            `x=${best.x.map(b=>b?1:0).join("")}`;
+        }
+      }
+
+      s++;
+      if(s>=stepsTotal) stopAnneal();
+    }, Math.max(1, Math.floor(1000/Math.max(10, rate))));
+  }
+
+  function stopAnneal(){
+    if(!solveRunning) return;
+    solveRunning=false;
+    $("solveStart").disabled=false;
+    $("solveStop").disabled=true;
+    if(solveTimer){ clearInterval(solveTimer); solveTimer=null; }
+  }
+  $("solveStart").onclick=startAnneal;
+  $("solveStop").onclick=stopAnneal;
+
+
+  // ===== Radio / antenna telemetry (browser-safe) =====
+  const netInfoEl = $("netInfo");
+  function refreshNetInfo(){
+    try{
+      const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      if(!c){
+        netInfoEl.textContent = "NetworkInformation API not available on this browser.";
+        return;
+      }
+      const parts = [];
+      if(c.type) parts.push(`type=${c.type}`);
+      if(c.effectiveType) parts.push(`effectiveType=${c.effectiveType}`);
+      if(typeof c.downlink === "number") parts.push(`downlink=${c.downlink} Mbps`);
+      if(typeof c.rtt === "number") parts.push(`rtt=${c.rtt} ms`);
+      if(typeof c.saveData === "boolean") parts.push(`saveData=${c.saveData}`);
+      netInfoEl.textContent = parts.length ? parts.join("  |  ") : "No fields populated.";
+    } catch(e){
+      netInfoEl.textContent = "Error reading connection info: " + (e?.message || String(e));
+    }
+  }
+  try{
+    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if(c && typeof c.addEventListener==="function") c.addEventListener("change", refreshNetInfo);
+  }catch{}
+  refreshNetInfo();
+
+  // ===== Web Bluetooth external “antenna voltage” sensor =====
+  let bleDev=null, bleSrv=null, bleChrObj=null;
+
+  function parseBleValue(dv){
+    // Try uint16 mV
+    try{
+      if(dv.byteLength >= 2){
+        const mv = dv.getUint16(0, true);
+        // Heuristic: if it looks sane, use it
+        if(mv >= 0 && mv <= 20000) return [mv];
+      }
+    }catch{}
+
+    // Try ASCII
+    try{
+      const txt = new TextDecoder().decode(dv.buffer.slice(dv.byteOffset, dv.byteOffset+dv.byteLength)).trim();
+      if(!txt) return null;
+      // CSV or single number
+      const parts = txt.split(/[,;\s]+/).filter(Boolean).map(x=>Number(x));
+      if(parts.length && parts.every(v=>Number.isFinite(v))) return parts;
+    }catch{}
+    return null;
+  }
+
+  function showBle(vals){
+    if(!vals){ $("bleRead").textContent = "—"; return; }
+    const s = vals.map(v=>`${Math.round(v)}mV`).join("  |  ");
+    $("bleRead").textContent = s;
+  }
+
+  function onBleNotify(ev){
+    const dv = ev.target.value;
+    const vals = parseBleValue(dv);
+    if(vals) showBle(vals);
+    else $("bleRead").textContent = `unparsed (${dv.byteLength} bytes)`;
+  }
+
+  async function bleConnect(){
+    if(!navigator.bluetooth){
+      alert("Web Bluetooth not available. Use Chrome on Android with https or a local file, and ensure Bluetooth is enabled.");
+      return;
+    }
+    const svc = $("bleSvc").value.trim();
+    const chr = $("bleChr").value.trim();
+    try{
+      $("bleRead").textContent = "requesting device…";
+      bleDev = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [svc]
+      });
+      bleDev.addEventListener("gattserverdisconnected", bleDisconnect);
+      const server = await bleDev.gatt.connect();
+      bleSrv = await server.getPrimaryService(svc);
+      bleChrObj = await bleSrv.getCharacteristic(chr);
+
+      // Prefer notifications if available
+      try{
+        await bleChrObj.startNotifications();
+        bleChrObj.addEventListener("characteristicvaluechanged", onBleNotify);
+        $("bleRead").textContent = "connected (notifications)";
+      }catch{
+        const v = await bleChrObj.readValue();
+        showBle(parseBleValue(v));
+        $("bleRead").textContent = "connected (read once)";
+      }
+
+      $("bleConnect").disabled = true;
+      $("bleDisconnect").disabled = false;
+    }catch(e){
+      $("bleRead").textContent = "BLE connect failed: " + (e?.message || String(e));
+      bleDev=null; bleSrv=null; bleChrObj=null;
+      $("bleConnect").disabled = false;
+      $("bleDisconnect").disabled = true;
+    }
+  }
+
+  async function bleDisconnect(){
+    try{
+      if(bleChrObj){
+        try{ bleChrObj.removeEventListener("characteristicvaluechanged", onBleNotify); }catch{}
+        try{ await bleChrObj.stopNotifications(); }catch{}
+      }
+    }catch{}
+    try{
+      if(bleDev && bleDev.gatt && bleDev.gatt.connected) bleDev.gatt.disconnect();
+    }catch{}
+    bleDev=null; bleSrv=null; bleChrObj=null;
+    $("bleRead").textContent = "disconnected";
+    $("bleConnect").disabled = false;
+    $("bleDisconnect").disabled = true;
+  }
+
+  $("bleConnect").onclick = bleConnect;
+  $("bleDisconnect").onclick = bleDisconnect;
+
+
+  // ===== Prime index predictor (exact) =====
+  let primeAbort = false;
+
+  function upperBoundNthPrime(n){
+    // For n >= 6: p_n <= n (ln n + ln ln n)  (standard proven upper bound).
+    // Add a small safety margin (+10) to cover rounding.
+    if(n <= 0) return 0;
+    if(n === 1) return 2;
+    if(n === 2) return 3;
+    if(n === 3) return 5;
+    if(n === 4) return 7;
+    if(n === 5) return 11;
+    const nn = Number(n);
+    const u = Math.ceil(nn * (Math.log(nn) + Math.log(Math.log(nn))) + 10);
+    return Math.max(u, 20);
+  }
+
+  function simpleSieve(limit){
+    // returns primes up to limit (inclusive)
+    const n = Math.max(2, limit|0);
+    const isPrime = new Uint8Array(n+1);
+    isPrime.fill(1);
+    isPrime[0]=0; isPrime[1]=0;
+    const r = Math.floor(Math.sqrt(n));
+    for(let p=2;p<=r;p++){
+      if(isPrime[p]){
+        for(let k=p*p;k<=n;k+=p) isPrime[k]=0;
+      }
+    }
+    const primes=[];
+    for(let i=2;i<=n;i++) if(isPrime[i]) primes.push(i);
+    return primes;
+  }
+
+  async function nthPrimeSegmented(n, onProgress){
+    if(n===1) return 2;
+    const U = upperBoundNthPrime(n);
+    const root = Math.floor(Math.sqrt(U));
+    const base = simpleSieve(root);
+
+    // segment over [2..U]
+    const segSize = 1<<20; // ~1,048,576
+    let count = 0;
+    let lastPrime = 2;
+    for(let low=2; low<=U; low+=segSize){
+      if(primeAbort) throw new Error("aborted");
+      const high = Math.min(U, low+segSize-1);
+      const len = high-low+1;
+      const mark = new Uint8Array(len);
+      mark.fill(1);
+
+      for(const p of base){
+        const pp = p*p;
+        if(pp > high) break;
+        // first multiple of p in [low..high]
+        let start = Math.max(pp, Math.ceil(low/p)*p);
+        for(let x=start; x<=high; x+=p) mark[x-low]=0;
+      }
+
+      // handle 0/1
+      if(low===2){ /* ok */ }
+      // count primes
+      for(let i=0;i<len;i++){
+        const val = low+i;
+        if(val>=2 && mark[i]){
+          count++;
+          lastPrime = val;
+          if(count === n) return lastPrime;
+        }
+      }
+
+      if(onProgress){
+        await onProgress({low, high, U, count, lastPrime});
+      }
+      // yield to UI
+      await new Promise(r=>setTimeout(r,0));
+    }
+    return lastPrime;
+  }
+
+  // Deterministic Miller-Rabin for 64-bit (exact for <= 2^64) with known bases.
+  // Note: uses BigInt; slower on phones. Good fallback if you want beyond sieve bounds.
+  function modPow(a, d, n){
+    let r=1n, x=a%n, e=d;
+    while(e>0n){
+      if(e&1n) r=(r*x)%n;
+      x=(x*x)%n;
+      e >>= 1n;
+    }
+    return r;
+  }
+  function isProbablePrime64(n){
+    if(n<2n) return false;
+    const small=[2n,3n,5n,7n,11n,13n,17n,19n,23n,29n,31n,37n];
+    for(const p of small){
+      if(n===p) return true;
+      if(n%p===0n) return false;
+    }
+    // write n-1 = d*2^s
+    let d=n-1n, s=0n;
+    while((d&1n)===0n){ d >>= 1n; s++; }
+    // bases sufficient for 64-bit determinism
+    const bases=[2n, 325n, 9375n, 28178n, 450775n, 9780504n, 1795265022n];
+    for(const a0 of bases){
+      const a = a0 % n;
+      if(a===0n) continue;
+      let x = modPow(a, d, n);
+      if(x===1n || x===n-1n) continue;
+      let cont=false;
+      for(let r=1n; r<s; r++){
+        x = (x*x) % n;
+        if(x===n-1n){ cont=true; break; }
+      }
+      if(cont) continue;
+      return false;
+    }
+    return true;
+  }
+  async function nthPrimeIncrementalMR(n, onProgress){
+    if(n===1) return 2;
+    let count=1; // already have 2
+    let x=3n;
+    let last=2n;
+    const stepReport=5000;
+    while(true){
+      if(primeAbort) throw new Error("aborted");
+      if(isProbablePrime64(x)){
+        count++;
+        last=x;
+        if(count===n) return Number(last); // ok up to safe integer when n not huge
+      }
+      x += 2n;
+      if(onProgress && (Number(x%BigInt(stepReport))===1)){
+        await onProgress({count, last:Number(last), cur:Number(x)});
+        await new Promise(r=>setTimeout(r,0));
+      }
+    }
+  }
+
+  function physicalSeedSnapshot(){
+    // Mix the current pole vectors (if present) into a 32-bit seed (diagnostic).
+    const n = Math.min(36, poleA.length||0);
+    let acc=0;
+    for(let i=0;i<n;i++){
+      const v = (Math.floor((poleA[i]||0)*1e6) ^ Math.floor((poleI[i]||0)*1e6) ^ Math.floor((poleQ[i]||0)*1e6))|0;
+      acc ^= mix32((v ^ (i*0x9e3779b9))>>>0);
+    }
+    return acc>>>0;
+  }
+
+  async function runPrime(){
+    const out=$("primeOut");
+    const prog=$("primeProg");
+    const n = parseInt($("primeN").value,10);
+    if(!Number.isFinite(n) || n<1){ out.textContent="Enter n >= 1"; return; }
+
+    primeAbort=false;
+    $("primeGo").disabled=true;
+    $("primeStop").disabled=false;
+
+    const seed = physicalSeedSnapshot();
+    const tStart = performance.now();
+
+    try{
+      out.textContent = `working…  seed32=0x${seed.toString(16).padStart(8,"0")}`;
+      prog.textContent = "—";
+
+      const method=$("primeMethod").value;
+      let p=0;
+
+      if(method==="seg"){
+        const U = upperBoundNthPrime(n);
+        prog.textContent = `upperBound U=${U} (guaranteed)  basePrimes<=sqrt(U)`;
+        p = await nthPrimeSegmented(n, async (st)=>{
+          prog.textContent =
+            `segment [${st.low}..${st.high}] / U=${st.U}  count=${st.count}  last=${st.lastPrime}`;
+        });
+      } else {
+        p = await nthPrimeIncrementalMR(n, async (st)=>{
+          prog.textContent = `count=${st.count}  last=${st.last}  cur=${st.cur}`;
+        });
+      }
+
+      const dt = (performance.now()-tStart)/1000;
+      out.textContent = `p(${n}) = ${p}\ncomputed in ${dt.toFixed(3)}s  seed32=0x${seed.toString(16).padStart(8,"0")}`;
+    } catch(e){
+      const dt = (performance.now()-tStart)/1000;
+      out.textContent = `stopped / failed after ${dt.toFixed(3)}s: ${e?.message || String(e)}`;
+    } finally {
+      $("primeGo").disabled=false;
+      $("primeStop").disabled=true;
+    }
+  }
+
+  $("primeGo").onclick = runPrime;
+  $("primeStop").onclick = ()=>{ primeAbort=true; };
+  // ===== Export =====
+  $("export").onclick=()=>{
+    const prob=buildProblem();
+    const payload={
+      meta:{
+        created:new Date().toISOString(),
+        ua:navigator.userAgent,
+        fpsEstimate:fpsEst,
+        grid: gridSize(),
+        N: Nvars(),
+        banks: banksCount(Nvars()),
+        carriers,
+        settings:{
+          wave:$("wave").value,
+          depth:parseFloat($("depth").value),
+          scalar:$("sig").value,
+          dwell:parseFloat($("dwell").value),
+          tau:parseFloat($("tau").value),
+          alpha:parseFloat($("alpha").value),
+          butterOrder:parseInt($("order").value,10),
+          lp_fc:parseFloat($("fc").value)
+        },
+        problem: prob.mode
+      },
+      vectors:{A:poleA, I:poleI, Q:poleQ},
+      traces:{raw:rawBuf, filtered:filtBuf, meanA_active:meanABuf},
+      qubo:{Q:prob.Q, meta:prob.meta},
+      solver:{best}
+    };
+    const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="baz_qubo_lab_extended_export.json";
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  };
+
+  // ===== Init =====
+  ctxP.fillStyle="#000"; ctxP.fillRect(0,0,plot.width,plot.height);
+  statusEl.textContent="idle";
+  fpsEl.textContent="—";
+  touchOkEl.textContent="no";
+  touchOkEl.className="bad";
+  bankInfoEl.textContent="—";
+})();
+</script>
+</body>
+</html>
