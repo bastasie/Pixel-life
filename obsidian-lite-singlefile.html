@@ -1,0 +1,1036 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b0b" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Vault Notes (Single‑File • Local‑Only)</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin:0; height:100%; background:#070707; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    * { box-sizing: border-box; }
+
+    #app { position:fixed; inset:0; display:flex; flex-direction:column; padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom)); gap:10px; }
+
+    .bar {
+      display:flex; align-items:center; gap:10px;
+      padding: 10px 12px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(10px);
+    }
+    .bar h1 { margin:0; font-size:14px; font-weight:900; opacity:0.95; letter-spacing:0.2px; }
+    .bar .hint { margin-left:auto; font-size:12px; opacity:0.70; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 50vw; }
+
+    button, select, input[type="text"] {
+      appearance:none;
+      border:1px solid rgba(255,255,255,0.14);
+      background: rgba(0,0,0,0.42);
+      backdrop-filter: blur(10px);
+      color: rgba(255,255,255,0.92);
+      padding: 10px 10px;
+      border-radius: 16px;
+      font-weight: 800;
+      font-size: 13px;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    button:active { transform: translateY(1px); background: rgba(255,255,255,0.09); }
+    input[type="text"] { font-weight: 700; }
+    input[type="text"]::placeholder { opacity:0.55; }
+    .btnSmall { padding: 9px 10px; border-radius: 14px; font-size: 12px; }
+
+    #main {
+      flex:1;
+      min-height:0;
+      display:grid;
+      grid-template-columns: 320px 1fr 320px;
+      gap:10px;
+    }
+    .card {
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.46);
+      backdrop-filter: blur(12px);
+      padding: 12px;
+      min-height:0;
+      overflow:hidden;
+    }
+
+    /* Left: vault + file tree */
+    #left { display:flex; flex-direction:column; gap:10px; min-height:0; }
+    #row1 { display:flex; gap:10px; align-items:center; }
+    #search { flex:1; }
+    #tree { flex:1; min-height:0; overflow:auto; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); }
+    .node {
+      display:flex; align-items:center; gap:10px;
+      padding: 9px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      cursor:pointer;
+      user-select:none;
+    }
+    .node:hover { background: rgba(255,255,255,0.05); }
+    .node.active { background: rgba(255,255,255,0.08); }
+    .node .dot { width: 10px; height: 10px; border-radius: 999px; background: rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.10); }
+    .node .name { font-weight: 850; font-size: 13px; opacity:0.93; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .node .meta { margin-left:auto; font-size: 11px; opacity:0.68; white-space:nowrap; }
+
+    /* Center: editor */
+    #center { display:flex; flex-direction:column; gap:10px; min-height:0; }
+    #tabs { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .pill {
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.05);
+      font-size: 12px;
+      opacity:0.86;
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+    #pathLabel { opacity:0.85; max-width: 55vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #editorWrap { flex:1; min-height:0; display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    #md {
+      width:100%; height:100%;
+      resize:none;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.35);
+      color: rgba(255,255,255,0.92);
+      padding: 12px;
+      outline:none;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    #preview {
+      width:100%; height:100%;
+      overflow:auto;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.35);
+      padding: 12px;
+    }
+    #preview h1, #preview h2, #preview h3 { margin: 0.6em 0 0.35em; }
+    #preview p { margin: 0.45em 0; opacity: 0.92; }
+    #preview code { background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.10); }
+    #preview pre { background: rgba(0,0,0,0.40); padding: 10px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); overflow:auto; }
+    #preview a { color: inherit; text-decoration: underline; text-decoration-color: rgba(255,255,255,0.25); }
+    #preview blockquote { border-left: 3px solid rgba(255,255,255,0.20); margin: 0.8em 0; padding: 0.2em 0 0.2em 0.8em; opacity:0.9; }
+    #preview ul { padding-left: 1.3em; }
+    #preview .tag { display:inline-block; padding: 2px 8px; border:1px solid rgba(255,255,255,0.12); border-radius: 999px; background: rgba(255,255,255,0.05); opacity:0.9; margin-right:6px; font-size: 12px; }
+
+    /* Right: backlinks + graph */
+    #right { display:flex; flex-direction:column; gap:10px; min-height:0; }
+    #backlinks { flex: 1; min-height:0; overflow:auto; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); padding: 8px; }
+    .blItem { padding: 10px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.30); margin: 8px 0; cursor:pointer; }
+    .blItem:hover { background: rgba(255,255,255,0.05); }
+    .blItem .t { font-weight: 900; opacity:0.92; }
+    .blItem .s { margin-top:6px; font-size: 12px; opacity:0.72; line-height:1.35; }
+
+    #graphWrap { height: 220px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); overflow:hidden; }
+    #graph { width:100%; height:100%; display:block; background: rgba(0,0,0,0.25); }
+
+    #toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(10px + env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(10px);
+      font-size: 12px;
+      opacity: 0;
+      transition: opacity 180ms ease;
+      pointer-events:none;
+      max-width: 92vw;
+      white-space: nowrap;
+      overflow:hidden;
+      text-overflow: ellipsis;
+      z-index: 50;
+    }
+    #toast.show { opacity: 0.88; }
+
+    #modal {
+      position: fixed; inset: 0;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding: 18px;
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(8px);
+      z-index: 60;
+    }
+    #modal.show { display:flex; }
+    #modal .box {
+      width: min(880px, 96vw);
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.68);
+      padding: 14px;
+    }
+    #modal .box h2 { margin: 0 0 8px; font-size: 14px; }
+    #modal .box p { margin: 6px 0; font-size: 13px; opacity:0.78; line-height:1.45; }
+    #kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; opacity:0.95; }
+    #modal .row { display:flex; gap:10px; flex-wrap:wrap; margin-top: 10px; }
+
+    @media (max-width: 980px) {
+      #main { grid-template-columns: 1fr; }
+      #editorWrap { grid-template-columns: 1fr; }
+      #graphWrap { height: 260px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="bar">
+      <h1>Vault Notes (local‑only)</h1>
+      <div class="hint" id="vaultHint">No vault opened</div>
+      <button id="btnHelp" class="btnSmall">?</button>
+    </div>
+
+    <div id="main">
+      <div id="left" class="card">
+        <div id="row1">
+          <button id="btnOpenVault">Open vault</button>
+          <button id="btnNew" class="btnSmall" title="New note">New</button>
+          <button id="btnSync" class="btnSmall" title="Rescan vault">Rescan</button>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <input id="search" type="text" placeholder="Search notes or #tags…" />
+          <button id="btnToday" class="btnSmall" title="Daily note">Today</button>
+        </div>
+        <div id="tree" aria-label="File list"></div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button id="btnExportOne" class="btnSmall" title="Download current note as .md">Export note</button>
+          <button id="btnPerm" class="btnSmall" title="Re-request directory permission">Permission</button>
+        </div>
+        <div style="font-size:12px; opacity:0.74; line-height:1.35; margin-top:8px;">
+          This is a single-file local vault app. It reads/writes your own <b>.md</b> files via Chrome’s File System Access API.
+          Nothing is uploaded anywhere.
+        </div>
+      </div>
+
+      <div id="center" class="card">
+        <div id="tabs">
+          <div class="pill"><span>Note:</span> <span id="pathLabel">—</span></div>
+          <div class="pill"><span>Status:</span> <span id="status">idle</span></div>
+          <button id="btnSave" class="btnSmall">Save</button>
+          <button id="btnSplit" class="btnSmall" title="Toggle preview split">Split</button>
+          <button id="btnLink" class="btnSmall" title="Insert [[Link]]">[[ ]]</button>
+        </div>
+        <div id="editorWrap">
+          <textarea id="md" spellcheck="false" placeholder="Open a vault, then pick a note (or create one)."></textarea>
+          <div id="preview" aria-label="Preview"></div>
+        </div>
+      </div>
+
+      <div id="right" class="card">
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <div class="pill"><span>Backlinks</span></div>
+          <button id="btnGraph" class="btnSmall">Graph</button>
+        </div>
+        <div id="backlinks"></div>
+        <div id="graphWrap">
+          <canvas id="graph"></canvas>
+        </div>
+        <div style="font-size:12px; opacity:0.72; line-height:1.35; margin-top:6px;">
+          Links supported: <span id="kbd">[[Note Name]]</span> or <span id="kbd">[[folder/note]]</span>. Tags: <span id="kbd">#tag</span>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <div id="modal">
+    <div class="box">
+      <h2>Help</h2>
+      <p><span id="kbd">Open vault</span> → pick a folder containing your Markdown files. This app edits those files directly.</p>
+      <p><span id="kbd">Ctrl/Cmd + S</span> save • <span id="kbd">Ctrl/Cmd + P</span> command palette (mini) • click a <span id="kbd">[[link]]</span> in preview to open.</p>
+      <p>Search supports plain text or tags like <span id="kbd">#math</span>.</p>
+      <p>Privacy: everything stays on your device. No network calls.</p>
+      <div class="row">
+        <button id="btnCloseHelp">Close</button>
+        <button id="btnWipe">Forget vault handle</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ---------- Guardrails ----------
+  if (!("showDirectoryPicker" in window)) {
+    alert("Your browser doesn't support the File System Access API. Use Chrome/Edge on desktop or Android Chrome.");
+  }
+
+  // ---------- UI ----------
+  const elVaultHint = document.getElementById("vaultHint");
+  const tree = document.getElementById("tree");
+  const search = document.getElementById("search");
+  const md = document.getElementById("md");
+  const preview = document.getElementById("preview");
+  const pathLabel = document.getElementById("pathLabel");
+  const status = document.getElementById("status");
+  const toastEl = document.getElementById("toast");
+  const graphCanvas = document.getElementById("graph");
+  const backlinksEl = document.getElementById("backlinks");
+  const modal = document.getElementById("modal");
+
+  const btnOpenVault = document.getElementById("btnOpenVault");
+  const btnNew = document.getElementById("btnNew");
+  const btnSync = document.getElementById("btnSync");
+  const btnSave = document.getElementById("btnSave");
+  const btnSplit = document.getElementById("btnSplit");
+  const btnLink = document.getElementById("btnLink");
+  const btnToday = document.getElementById("btnToday");
+  const btnExportOne = document.getElementById("btnExportOne");
+  const btnPerm = document.getElementById("btnPerm");
+  const btnGraph = document.getElementById("btnGraph");
+  const btnHelp = document.getElementById("btnHelp");
+  const btnCloseHelp = document.getElementById("btnCloseHelp");
+  const btnWipe = document.getElementById("btnWipe");
+
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toastEl.classList.remove("show"), 1100);
+  }
+  function setStatus(s) { status.textContent = s; }
+
+  // ---------- Minimal IndexedDB for persisting directory handle ----------
+  const DB_NAME = "vault_notes_db_v1";
+  const DB_STORE = "kv";
+  const KEY_HANDLE = "vault_handle";
+
+  function idbOpen() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idbGet(key) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, "readonly");
+      const st = tx.objectStore(DB_STORE);
+      const r = st.get(key);
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    });
+  }
+  async function idbSet(key, val) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, "readwrite");
+      const st = tx.objectStore(DB_STORE);
+      const r = st.put(val, key);
+      r.onsuccess = () => resolve(true);
+      r.onerror = () => reject(r.error);
+    });
+  }
+  async function idbDel(key) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, "readwrite");
+      const st = tx.objectStore(DB_STORE);
+      const r = st.delete(key);
+      r.onsuccess = () => resolve(true);
+      r.onerror = () => reject(r.error);
+    });
+  }
+
+  // ---------- Vault state ----------
+  let vault = null; // FileSystemDirectoryHandle
+  // notes map: path -> { handle, content, mtime, title }
+  const notes = new Map();
+  let currentPath = null;
+  let dirty = false;
+  let splitOn = true;
+
+  // ---------- Helpers ----------
+  const enc = new TextEncoder();
+  const dec = new TextDecoder();
+
+  function basename(p) {
+    const s = p.replaceAll("\\","/").split("/");
+    return s[s.length-1] || p;
+  }
+  function stripExt(name) { return name.endsWith(".md") ? name.slice(0,-3) : name; }
+
+  function todayPath() {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth()+1).padStart(2,"0");
+    const dd = String(d.getDate()).padStart(2,"0");
+    return `Daily/${yyyy}-${mm}-${dd}.md`;
+  }
+
+  async function ensurePerm(handle, mode="readwrite") {
+    try {
+      const q = await handle.queryPermission({ mode });
+      if (q === "granted") return true;
+      const r = await handle.requestPermission({ mode });
+      return r === "granted";
+    } catch {
+      return false;
+    }
+  }
+
+  async function getFileText(fileHandle) {
+    const f = await fileHandle.getFile();
+    return await f.text();
+  }
+  async function writeFileText(fileHandle, text) {
+    const writable = await fileHandle.createWritable();
+    await writable.write(text);
+    await writable.close();
+  }
+
+  async function getOrCreateFile(dirHandle, pathParts) {
+    let dir = dirHandle;
+    for (let i=0; i<pathParts.length-1; i++) {
+      dir = await dir.getDirectoryHandle(pathParts[i], { create: true });
+    }
+    return await dir.getFileHandle(pathParts[pathParts.length-1], { create: true });
+  }
+
+  async function resolveFileHandle(dirHandle, pathParts) {
+    let dir = dirHandle;
+    for (let i=0; i<pathParts.length-1; i++) {
+      dir = await dir.getDirectoryHandle(pathParts[i], { create: false });
+    }
+    return await dir.getFileHandle(pathParts[pathParts.length-1], { create: false });
+  }
+
+  async function walkDir(dirHandle, prefix="") {
+    for await (const [name, handle] of dirHandle.entries()) {
+      const path = prefix ? `${prefix}/${name}` : name;
+      if (handle.kind === "directory") {
+        if (name.startsWith(".")) continue;
+        await walkDir(handle, path);
+      } else {
+        if (name.toLowerCase().endsWith(".md")) {
+          notes.set(path, { handle, content: null, mtime: 0, title: stripExt(basename(path)) });
+        }
+      }
+    }
+  }
+
+  function pickTitleFromContent(path, text) {
+    // Use first "# " header or filename
+    const m = text.match(/^\s*#\s+(.+)$/m);
+    if (m) return m[1].trim();
+    return stripExt(basename(path));
+  }
+
+  function normalizeSearch(s) { return (s||"").toLowerCase(); }
+
+  // Extract [[links]] from markdown
+  function extractLinks(text) {
+    const out = [];
+    const re = /\[\[([^\]]+)\]\]/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const raw = m[1].trim();
+      const target = raw.split("|")[0].trim(); // [[target|alias]]
+      out.push(target);
+    }
+    return out;
+  }
+  function extractTags(text) {
+    // simple tags: #word (not inside code fences)
+    const out = new Set();
+    const re = /(^|[^\w])#([A-Za-z0-9_\/-]{1,50})\b/g;
+    let m;
+    while ((m = re.exec(text)) !== null) out.add(m[2]);
+    return [...out];
+  }
+
+  function noteKeyFromLink(link) {
+    // If link already looks like path, accept; else match by title
+    const cleaned = link.replaceAll("\\","/").replace(/\.md$/i,"");
+    // Direct path match (folder/note)
+    for (const p of notes.keys()) {
+      if (stripExt(p).toLowerCase() === cleaned.toLowerCase()) return p;
+      if (stripExt(basename(p)).toLowerCase() === cleaned.toLowerCase()) return p;
+    }
+    // Not found -> propose new note in root
+    return cleaned.endsWith(".md") ? cleaned : (cleaned + ".md");
+  }
+
+  // ---------- Minimal Markdown renderer (no libs) ----------
+  function escapeHtml(s) {
+    return (s||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+  }
+
+  function renderMarkdown(src) {
+    src = src || "";
+    // Code fences
+    const fence = [];
+    src = src.replace(/```([\s\S]*?)```/g, (_, code) => {
+      fence.push(code);
+      return `\u0000FENCE${fence.length-1}\u0000`;
+    });
+
+    // Inline code
+    src = src.replace(/`([^`]+)`/g, (_, c) => `<code>${escapeHtml(c)}</code>`);
+
+    // Headings
+    src = src.replace(/^###\s+(.+)$/gm, (_, t) => `<h3>${inline(t)}</h3>`);
+    src = src.replace(/^##\s+(.+)$/gm, (_, t) => `<h2>${inline(t)}</h2>`);
+    src = src.replace(/^#\s+(.+)$/gm, (_, t) => `<h1>${inline(t)}</h1>`);
+
+    // Blockquotes
+    src = src.replace(/^\>\s+(.+)$/gm, (_, t) => `<blockquote>${inline(t)}</blockquote>`);
+
+    // Lists (very small)
+    src = src.replace(/(?:^\s*-\s+.+\n?)+/gm, (block) => {
+      const items = block.trim().split("\n").map(l => l.replace(/^\s*-\s+/, "").trim());
+      return `<ul>${items.map(it => `<li>${inline(it)}</li>`).join("")}</ul>`;
+    });
+
+    // Paragraphs: split on blank lines, ignore already block tags
+    const parts = src.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+    let html = parts.map(p => {
+      if (p.startsWith("<h") || p.startsWith("<ul") || p.startsWith("<blockquote") ) return p;
+      return `<p>${inline(p.replace(/\n/g, "<br/>"))}</p>`;
+    }).join("\n");
+
+    // Restore fences
+    html = html.replace(/\u0000FENCE(\d+)\u0000/g, (_, i) => {
+      const code = fence[Number(i)] ?? "";
+      return `<pre><code>${escapeHtml(code)}</code></pre>`;
+    });
+
+    // Tags highlight (#tag)
+    html = html.replace(/(^|[^\w])#([A-Za-z0-9_\/-]{1,50})\b/g, (_, pre, t) => {
+      return `${pre}<span class="tag">#${escapeHtml(t)}</span>`;
+    });
+
+    return html;
+
+    function inline(s) {
+      s = escapeHtml(s);
+      // bold/italic (basic)
+      s = s.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+      s = s.replace(/\*([^*]+)\*/g, "<i>$1</i>");
+      // links: [text](url)
+      s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      // wikilinks: [[target|alias]]
+      s = s.replace(/\[\[([^\]]+)\]\]/g, (_, body) => {
+        const [target, alias] = body.split("|").map(x => x.trim());
+        const label = alias || target;
+        return `<a href="#" data-wikilink="${escapeHtml(target)}">${escapeHtml(label)}</a>`;
+      });
+      return s;
+    }
+  }
+
+  function updatePreview() {
+    preview.innerHTML = renderMarkdown(md.value);
+    // clickable wikilinks
+    preview.querySelectorAll("[data-wikilink]").forEach(a => {
+      a.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const target = a.getAttribute("data-wikilink") || "";
+        const path = noteKeyFromLink(target);
+        await openNote(path, { createIfMissing: true });
+      });
+    });
+  }
+
+  // ---------- Backlinks + Graph ----------
+  function getLinkGraph() {
+    // returns { nodes:[{path,title}], edges:[{from,to}] } using loaded content if available
+    const nodes = [];
+    const idx = new Map(); // path -> i
+    for (const [p, n] of notes.entries()) {
+      nodes.push({ path: p, title: n.title || stripExt(basename(p)) });
+      idx.set(p, nodes.length-1);
+    }
+    const edges = [];
+    for (const [p, n] of notes.entries()) {
+      const text = (n.content ?? "");
+      const links = extractLinks(text);
+      for (const l of links) {
+        const to = noteKeyFromLink(l);
+        if (idx.has(to)) edges.push({ from: p, to });
+      }
+    }
+    return { nodes, edges };
+  }
+
+  function computeBacklinks(toPath) {
+    const out = [];
+    const toTitle = stripExt(basename(toPath)).toLowerCase();
+    for (const [p, n] of notes.entries()) {
+      if (p === toPath) continue;
+      const text = n.content ?? "";
+      if (!text) continue;
+      const links = extractLinks(text).map(x => noteKeyFromLink(x));
+      if (links.includes(toPath)) {
+        // excerpt: show first line containing [[...]]
+        const lines = text.split("\n");
+        const hit = lines.find(l => l.includes("[[")) || lines[0] || "";
+        out.push({ path: p, title: n.title, excerpt: hit.slice(0, 160) });
+        continue;
+      }
+      // Soft match by title
+      if (text.toLowerCase().includes(`[[${toTitle}`)) {
+        const lines = text.split("\n");
+        const hit = lines.find(l => l.toLowerCase().includes(`[[${toTitle}`)) || lines[0] || "";
+        out.push({ path: p, title: n.title, excerpt: hit.slice(0, 160) });
+      }
+    }
+    return out;
+  }
+
+  function renderBacklinks() {
+    backlinksEl.innerHTML = "";
+    if (!currentPath) {
+      backlinksEl.innerHTML = `<div style="opacity:0.75; padding:10px;">Open a note to see backlinks.</div>`;
+      return;
+    }
+    const bl = computeBacklinks(currentPath);
+    if (!bl.length) {
+      backlinksEl.innerHTML = `<div style="opacity:0.75; padding:10px;">No backlinks.</div>`;
+      return;
+    }
+    for (const it of bl) {
+      const div = document.createElement("div");
+      div.className = "blItem";
+      div.innerHTML = `<div class="t">${escapeHtml(it.title || stripExt(basename(it.path)))}</div>
+                       <div class="s">${escapeHtml(it.excerpt || "")}</div>`;
+      div.addEventListener("click", () => openNote(it.path));
+      backlinksEl.appendChild(div);
+    }
+  }
+
+  function drawGraph(centerPath=null) {
+    const ctx = graphCanvas.getContext("2d");
+    const rect = graphCanvas.getBoundingClientRect();
+    graphCanvas.width = Math.floor(rect.width * devicePixelRatio);
+    graphCanvas.height = Math.floor(rect.height * devicePixelRatio);
+    ctx.scale(devicePixelRatio, devicePixelRatio);
+
+    const { nodes, edges } = getLinkGraph();
+    const w = rect.width, h = rect.height;
+
+    // Build adjacency
+    const adj = new Map();
+    for (const e of edges) {
+      if (!adj.has(e.from)) adj.set(e.from, new Set());
+      if (!adj.has(e.to)) adj.set(e.to, new Set());
+      adj.get(e.from).add(e.to);
+      adj.get(e.to).add(e.from);
+    }
+
+    // Simple radial layout around current note
+    const center = centerPath || (nodes[0]?.path ?? null);
+    const ring = [];
+    const used = new Set();
+    if (center) {
+      used.add(center);
+      const neigh = [...(adj.get(center) || [])];
+      for (const p of neigh) { if (!used.has(p)) { used.add(p); ring.push(p); } }
+      // second ring (limited)
+      const ring2 = [];
+      for (const p of ring) {
+        for (const q of (adj.get(p) || [])) {
+          if (!used.has(q) && ring2.length < 18) { used.add(q); ring2.push(q); }
+        }
+      }
+      // remaining (cap)
+      const rest = nodes.map(n => n.path).filter(p => !used.has(p)).slice(0, 18);
+      used.clear();
+      used.add(center);
+      ring.push(...ring2, ...rest);
+    }
+
+    const pos = new Map();
+    const cx = w/2, cy = h/2;
+    if (center) pos.set(center, { x: cx, y: cy });
+    const R1 = Math.min(w,h)*0.28;
+    const R2 = Math.min(w,h)*0.40;
+    for (let i=0; i<ring.length; i++) {
+      const a = (i / ring.length) * Math.PI * 2;
+      const r = (i < 10) ? R1 : R2;
+      pos.set(ring[i], { x: cx + r*Math.cos(a), y: cy + r*Math.sin(a) });
+    }
+    // any nodes not positioned (tiny) -> sprinkle
+    for (const n of nodes) {
+      if (!pos.has(n.path)) {
+        const a = Math.random()*Math.PI*2;
+        const r = Math.min(w,h)*0.45;
+        pos.set(n.path, { x: cx + r*Math.cos(a), y: cy + r*Math.sin(a) });
+      }
+    }
+
+    // Clear
+    ctx.clearRect(0,0,w,h);
+
+    // Edges
+    ctx.globalAlpha = 0.40;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255,255,255,0.35)";
+    for (const e of edges) {
+      const p1 = pos.get(e.from), p2 = pos.get(e.to);
+      if (!p1 || !p2) continue;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+    }
+
+    // Nodes
+    for (const n of nodes) {
+      const p = pos.get(n.path);
+      if (!p) continue;
+      const isCenter = (n.path === center);
+      ctx.globalAlpha = isCenter ? 0.95 : 0.75;
+      ctx.fillStyle = isCenter ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.55)";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, isCenter ? 6 : 4, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  // ---------- Render file list ----------
+  function renderTree() {
+    tree.innerHTML = "";
+    const q = normalizeSearch(search.value).trim();
+
+    // Sort: folders first-ish by path length, then name
+    const paths = [...notes.keys()].sort((a,b) => a.localeCompare(b));
+    const filtered = q ? paths.filter(p => {
+      const n = notes.get(p);
+      const title = (n?.title || stripExt(basename(p))).toLowerCase();
+      if (q.startsWith("#")) {
+        const tag = q.slice(1);
+        const text = (n?.content || "");
+        return text.toLowerCase().includes("#" + tag.toLowerCase());
+      }
+      if (title.includes(q)) return true;
+      return p.toLowerCase().includes(q);
+    }) : paths;
+
+    for (const p of filtered) {
+      const n = notes.get(p);
+      const div = document.createElement("div");
+      div.className = "node" + (p === currentPath ? " active" : "");
+      const dot = document.createElement("div"); dot.className = "dot";
+      const name = document.createElement("div"); name.className = "name"; name.textContent = n?.title || stripExt(basename(p));
+      const meta = document.createElement("div"); meta.className = "meta";
+      meta.textContent = (n?.content ? (extractLinks(n.content).length + " links") : "—");
+      div.appendChild(dot); div.appendChild(name); div.appendChild(meta);
+      div.title = p;
+      div.addEventListener("click", () => openNote(p));
+      tree.appendChild(div);
+    }
+
+    if (!filtered.length) {
+      const empty = document.createElement("div");
+      empty.style.padding = "12px";
+      empty.style.opacity = "0.75";
+      empty.textContent = "No notes.";
+      tree.appendChild(empty);
+    }
+  }
+
+  // ---------- Open / Save ----------
+  async function openNote(path, opts={}) {
+    if (!vault) { toast("Open a vault first"); return; }
+    if (dirty && currentPath && md.value !== (notes.get(currentPath)?.content ?? "")) {
+      // Don't block; but warn
+      toast("Unsaved changes (Ctrl+S)");
+    }
+
+    // Ensure note exists in map
+    if (!notes.has(path) && opts.createIfMissing) {
+      // Create file
+      const parts = path.replaceAll("\\","/").split("/").filter(Boolean);
+      if (!parts[parts.length-1].toLowerCase().endsWith(".md")) parts[parts.length-1] += ".md";
+      const fh = await getOrCreateFile(vault, parts);
+      notes.set(parts.join("/"), { handle: fh, content: "", mtime: Date.now(), title: stripExt(basename(parts.join("/"))) });
+      path = parts.join("/");
+      toast("Created " + basename(path));
+    }
+
+    const n = notes.get(path);
+    if (!n) { toast("Note not found"); return; }
+
+    // Load content lazily
+    try {
+      setStatus("loading…");
+      const ok = await ensurePerm(vault, "readwrite");
+      if (!ok) { setStatus("permission blocked"); toast("Permission denied"); return; }
+      const text = await getFileText(n.handle);
+      n.content = text;
+      n.title = pickTitleFromContent(path, text);
+      notes.set(path, n);
+      currentPath = path;
+      dirty = false;
+      pathLabel.textContent = path;
+      md.value = text;
+      updatePreview();
+      renderTree();
+      renderBacklinks();
+      drawGraph(currentPath);
+      setStatus("ready");
+    } catch (e) {
+      setStatus("error");
+      toast("Open failed");
+      console.error(e);
+    }
+  }
+
+  async function saveCurrent() {
+    if (!vault || !currentPath) { toast("Nothing to save"); return; }
+    const n = notes.get(currentPath);
+    if (!n) { toast("Note missing"); return; }
+    try {
+      setStatus("saving…");
+      const ok = await ensurePerm(vault, "readwrite");
+      if (!ok) { setStatus("permission blocked"); toast("Permission denied"); return; }
+      await writeFileText(n.handle, md.value);
+      n.content = md.value;
+      n.title = pickTitleFromContent(currentPath, md.value);
+      notes.set(currentPath, n);
+      dirty = false;
+      updatePreview();
+      renderTree();
+      renderBacklinks();
+      drawGraph(currentPath);
+      setStatus("saved");
+      toast("Saved");
+      setTimeout(() => setStatus("ready"), 650);
+    } catch (e) {
+      setStatus("error");
+      toast("Save failed");
+      console.error(e);
+    }
+  }
+
+  // Autosave debounce for preview only, not file write
+  let previewT = null;
+  md.addEventListener("input", () => {
+    dirty = true;
+    setStatus("editing…");
+    clearTimeout(previewT);
+    previewT = setTimeout(() => {
+      updatePreview();
+      renderBacklinks();
+      drawGraph(currentPath);
+    }, 120);
+  });
+
+  // ---------- Vault open / scan ----------
+  async function openVaultPicker() {
+    try {
+      const h = await window.showDirectoryPicker({ mode: "readwrite" });
+      const ok = await ensurePerm(h, "readwrite");
+      if (!ok) { toast("Permission denied"); return; }
+      vault = h;
+      await idbSet(KEY_HANDLE, vault);
+      await rescanVault();
+      toast("Vault opened");
+    } catch (e) {
+      // user canceled
+    }
+  }
+
+  async function restoreVault() {
+    try {
+      const h = await idbGet(KEY_HANDLE);
+      if (!h) return false;
+      const ok = await ensurePerm(h, "readwrite");
+      if (!ok) return false;
+      vault = h;
+      await rescanVault();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function rescanVault() {
+    if (!vault) return;
+    setStatus("scanning…");
+    notes.clear();
+    await walkDir(vault, "");
+    elVaultHint.textContent = "Vault: " + (vault.name || "(folder)");
+    renderTree();
+    renderBacklinks();
+    drawGraph(currentPath);
+    setStatus("ready");
+    // Auto-open last note if possible
+    if (currentPath && notes.has(currentPath)) {
+      await openNote(currentPath);
+    } else if (!currentPath) {
+      const first = [...notes.keys()][0];
+      if (first) await openNote(first);
+    }
+  }
+
+  // ---------- Create new note ----------
+  async function newNoteFlow() {
+    if (!vault) { toast("Open a vault first"); return; }
+    const name = prompt("New note name (you can include folders like Projects/Idea):", "New Note");
+    if (!name) return;
+    let path = name.replaceAll("\\","/").trim();
+    if (!path.toLowerCase().endsWith(".md")) path += ".md";
+    const parts = path.split("/").filter(Boolean);
+    try {
+      const ok = await ensurePerm(vault, "readwrite");
+      if (!ok) { toast("Permission denied"); return; }
+      const fh = await getOrCreateFile(vault, parts);
+      const full = parts.join("/");
+      if (!notes.has(full)) notes.set(full, { handle: fh, content: "", mtime: Date.now(), title: stripExt(basename(full)) });
+      await openNote(full);
+    } catch {
+      toast("Create failed");
+    }
+  }
+
+  // ---------- Daily note ----------
+  async function openDaily() {
+    const p = todayPath();
+    await openNote(p, { createIfMissing: true });
+    // if empty, prefill title
+    const n = notes.get(currentPath);
+    if (n && (n.content ?? "").trim().length === 0) {
+      md.value = `# ${stripExt(basename(p))}\n\n- \n`;
+      updatePreview();
+      dirty = true;
+      setStatus("editing…");
+    }
+  }
+
+  // ---------- Export current note ----------
+  function exportCurrentNote() {
+    if (!currentPath) { toast("No note"); return; }
+    const blob = new Blob([md.value], { type: "text/markdown;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = basename(currentPath);
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1200);
+    toast("Downloaded .md");
+  }
+
+  // ---------- Commands (tiny palette) ----------
+  function palette() {
+    const cmd = prompt("Command:\n1) New note\n2) Today\n3) Save\n4) Rescan\n5) Toggle split\n\nType 1-5:", "3");
+    if (!cmd) return;
+    if (cmd === "1") newNoteFlow();
+    if (cmd === "2") openDaily();
+    if (cmd === "3") saveCurrent();
+    if (cmd === "4") rescanVault();
+    if (cmd === "5") toggleSplit();
+  }
+
+  // ---------- Split toggle ----------
+  function toggleSplit() {
+    splitOn = !splitOn;
+    document.getElementById("editorWrap").style.gridTemplateColumns = splitOn ? "1fr 1fr" : "1fr";
+    preview.style.display = splitOn ? "block" : "none";
+    toast(splitOn ? "Split on" : "Split off");
+  }
+
+  // ---------- Insert link helper ----------
+  function insertAtCursor(text) {
+    const start = md.selectionStart || 0;
+    const end = md.selectionEnd || 0;
+    const before = md.value.slice(0, start);
+    const after = md.value.slice(end);
+    md.value = before + text + after;
+    md.selectionStart = md.selectionEnd = start + text.length;
+    md.focus();
+    dirty = true;
+    updatePreview();
+  }
+
+  // ---------- Events ----------
+  btnOpenVault.addEventListener("click", openVaultPicker);
+  btnNew.addEventListener("click", newNoteFlow);
+  btnSync.addEventListener("click", rescanVault);
+  btnSave.addEventListener("click", saveCurrent);
+  btnSplit.addEventListener("click", toggleSplit);
+  btnLink.addEventListener("click", () => insertAtCursor("[[New Note]]"));
+  btnToday.addEventListener("click", openDaily);
+  btnExportOne.addEventListener("click", exportCurrentNote);
+  btnPerm.addEventListener("click", async () => {
+    if (!vault) { toast("Open a vault first"); return; }
+    const ok = await ensurePerm(vault, "readwrite");
+    toast(ok ? "Permission granted" : "Permission denied");
+  });
+  btnGraph.addEventListener("click", () => drawGraph(currentPath));
+
+  // Search update tree
+  let searchT = null;
+  search.addEventListener("input", () => {
+    clearTimeout(searchT);
+    searchT = setTimeout(renderTree, 120);
+  });
+
+  // Keyboard shortcuts
+  window.addEventListener("keydown", (e) => {
+    const k = e.key.toLowerCase();
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && k === "s") { e.preventDefault(); saveCurrent(); }
+    if (mod && k === "p") { e.preventDefault(); palette(); }
+  });
+
+  // Help modal
+  btnHelp.addEventListener("click", () => modal.classList.add("show"));
+  btnCloseHelp.addEventListener("click", () => modal.classList.remove("show"));
+  modal.addEventListener("click", (e) => { if (e.target === modal) modal.classList.remove("show"); });
+  btnWipe.addEventListener("click", async () => {
+    await idbDel(KEY_HANDLE);
+    vault = null;
+    notes.clear();
+    currentPath = null;
+    md.value = "";
+    preview.innerHTML = "";
+    pathLabel.textContent = "—";
+    elVaultHint.textContent = "No vault opened";
+    renderTree();
+    renderBacklinks();
+    drawGraph(null);
+    toast("Forgot vault handle");
+    modal.classList.remove("show");
+  });
+
+  // ---------- Boot ----------
+  (async () => {
+    setStatus("booting…");
+    toggleSplit(); // sets splitOff then on, so revert:
+    toggleSplit(); // end at splitOn
+    const restored = await restoreVault();
+    if (restored) toast("Vault restored");
+    else toast("Open a vault to start");
+    setStatus("ready");
+    updatePreview();
+    renderTree();
+    renderBacklinks();
+    drawGraph(null);
+  })();
+
+})();
+</script>
+</body>
+</html>
