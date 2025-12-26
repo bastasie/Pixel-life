@@ -1,0 +1,1483 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <meta name="theme-color" content="#0b0b0b"/>
+  <title>GIF‑OS Prototype (Single‑File)</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin:0; height:100%; background:#070707; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; overflow:hidden; }
+    * { box-sizing: border-box; }
+
+    #wrap { position:fixed; inset:0; display:flex; flex-direction:column; padding:max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom)); gap:10px; }
+    .bar {
+      display:flex; align-items:center; gap:10px;
+      padding:10px 12px; border-radius:18px;
+      border:1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(10px);
+    }
+    .bar h1 { margin:0; font-size:14px; font-weight:950; opacity:0.95; }
+    .bar .hint { margin-left:auto; font-size:12px; opacity:0.70; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 60vw; }
+
+    button, input[type="text"] {
+      appearance:none;
+      border:1px solid rgba(255,255,255,0.14);
+      background: rgba(0,0,0,0.42);
+      backdrop-filter: blur(10px);
+      color: rgba(255,255,255,0.92);
+      padding: 10px 10px;
+      border-radius: 16px;
+      font-weight: 850;
+      font-size: 13px;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      outline:none;
+    }
+    button:active { transform: translateY(1px); background: rgba(255,255,255,0.09); }
+    .btnSmall { padding: 9px 10px; border-radius: 14px; font-size: 12px; }
+
+    #main {
+      flex:1; min-height:0;
+      display:grid;
+      grid-template-columns: 1fr 360px;
+      gap:10px;
+    }
+    .card {
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.46);
+      backdrop-filter: blur(12px);
+      padding: 12px;
+      min-height:0;
+      overflow:hidden;
+    }
+
+    #screenCard { display:flex; flex-direction:column; gap:10px; }
+    #screenWrap { flex:1; min-height:0; display:grid; place-items:center; border-radius: 18px; border: 1px solid rgba(255,255,255,0.10); background: rgba(0,0,0,0.35); }
+    #screen {
+      width: min(92vw, 980px);
+      height: auto;
+      image-rendering: pixelated;
+      border-radius: 16px;
+      background: #000;
+      touch-action: none; /* we handle */
+    }
+
+    #panel { display:flex; flex-direction:column; gap:10px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .pill {
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.05);
+      font-size: 12px;
+      opacity:0.84;
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+    #log {
+      flex:1; min-height:0;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.30);
+      padding: 10px;
+      overflow:auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.35;
+      opacity:0.92;
+    }
+
+    #toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(10px + env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(10px);
+      font-size: 12px;
+      opacity: 0;
+      transition: opacity 180ms ease;
+      pointer-events:none;
+      max-width: 92vw;
+      white-space: nowrap;
+      overflow:hidden;
+      text-overflow: ellipsis;
+      z-index: 50;
+    }
+    #toast.show { opacity: 0.88; }
+
+    @media (max-width: 980px) {
+      #main { grid-template-columns: 1fr; }
+      #screen { width: min(94vw, 720px); }
+    }
+  
+    /* Overlay WebApp windows (DOM, above the pixel screen) */
+    #webWindows{
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 9999;
+    }
+    .webwin{
+      position: absolute;
+      width: min(980px, calc(100vw - 24px));
+      height: min(720px, calc(100vh - 24px));
+      left: 12px;
+      top: 12px;
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 18px 60px rgba(0,0,0,0.45);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      pointer-events: auto;
+    }
+    .webwinHeader{
+      display:flex; gap:10px; align-items:center;
+      padding: 10px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.35);
+      user-select:none;
+      cursor: grab;
+      touch-action: none;
+    }
+    .webwinHeader:active{ cursor: grabbing; }
+    .webwinTitle{
+      font-weight: 950;
+      font-size: 13px;
+      opacity: 0.95;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 65vw;
+    }
+    .webwinBtns{ margin-left:auto; display:flex; gap:8px; align-items:center; }
+    .webbtn{
+      appearance:none;
+      border:1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.92);
+      padding: 8px 10px;
+      border-radius: 14px;
+      font-weight: 950;
+      font-size: 12px;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      cursor:pointer;
+    }
+    .webbtn:active{ transform: translateY(1px); background: rgba(255,255,255,0.10); }
+    .webwinBody{ flex:1; min-height:0; background: rgba(0,0,0,0.35); }
+    .webwin iframe{ width:100%; height:100%; border:0; background: transparent; }
+
+</style>
+</head>
+<body>
+  <div id="wrap">
+    <div class="bar">
+      <h1>GIF‑OS Prototype</h1>
+      <div class="hint">Tile/PPU‑style renderer • delta updates • optional GIF recorder</div>
+      <button id="btnHelp" class="btnSmall">?</button>
+    </div>
+
+    <div id="main">
+      <div id="screenCard" class="card">
+        <div class="row">
+          <button id="btnBoot">Boot</button>
+          <button id="btnReset" class="btnSmall">Reset</button>
+          <button id="btnLoadApps" class="btnSmall">Load Apps</button>
+          <div class="pill"><span>FPS</span><span id="fps">—</span></div>
+          <div class="pill"><span>Dirty tiles</span><span id="dirty">—</span></div>
+          <div class="pill"><span>Recorder</span><span id="rec">idle</span></div>
+          <button id="btnRec" class="btnSmall">Record</button>
+          <button id="btnStop" class="btnSmall">Stop</button>
+          <button id="btnExport" class="btnSmall">Export GIF</button>
+        </div>
+        <div id="screenWrap">
+          <canvas id="screen" width="256" height="144" aria-label="GIF OS screen"></canvas>
+        </div>
+        <div style="font-size:12px; opacity:0.74; line-height:1.35;">
+          Tip: open this file directly in Chrome (not a “content:// viewer”), then tap the screen to interact.
+          Start button is bottom-left inside the pixel screen (menu includes Load Apps). Drag the window bar to move.
+        </div>
+      </div>
+
+      <div id="panel" class="card">
+        <div class="row">
+          <div class="pill">Build from scratch: PPU tile engine → paletted framebuffer → GIF frames</div>
+        </div>
+        <div class="row">
+          <button id="btnDemo" class="btnSmall">Demo: animate</button>
+          <button id="btnNotepad" class="btnSmall">Open Notepad</button>
+          <button id="btnAbout" class="btnSmall">About</button>
+        </div>
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <div id="webWindows" aria-label="Web app windows"></div>
+
+<script>
+(() => {
+  // ============================================================
+  // 0) Utilities
+  // ============================================================
+  const $ = (id) => document.getElementById(id);
+  const logEl = $("log");
+  const toastEl = $("toast");
+  function log(msg) {
+    const t = new Date().toLocaleTimeString();
+    const div = document.createElement("div");
+    div.textContent = `[${t}] ${msg}`;
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toastEl.classList.remove("show"), 1100);
+  }
+
+
+  // ============================================================
+  // 0.5) Local App Loader (Directory / File pick)
+  //     - Loads .html single-file apps from a chosen folder (or file picker fallback)
+  //     - Launches them in draggable overlay iframes (DOM windows above the pixel OS)
+  // ============================================================
+  const webWindows = $("webWindows");
+  const LoadedApps = {
+    list: [], // {name, handle}
+    async pick() {
+      this.list = [];
+      // Prefer directory picker when available
+      try {
+        if (window.showDirectoryPicker) {
+          const dir = await window.showDirectoryPicker({ mode: "read" });
+          for await (const [name, handle] of dir.entries()) {
+            if (handle.kind === "file" && /\.(html?|HTML?)$/.test(name)) {
+              this.list.push({ name, handle });
+            }
+          }
+          this.list.sort((a,b) => a.name.localeCompare(b.name));
+          log(`Loaded ${this.list.length} app(s) from folder.`);
+          toast(`Loaded ${this.list.length} app(s)`);
+          return this.list.length;
+        }
+      } catch (e) {
+        log("Directory picker cancelled/blocked: " + (e?.message || e));
+      }
+      // Fallback: multi-file picker
+      try {
+        if (window.showOpenFilePicker) {
+          const handles = await window.showOpenFilePicker({
+            multiple: true,
+            types: [{ description: "HTML apps", accept: { "text/html": [".html",".htm"] } }]
+          });
+          for (const h of handles) this.list.push({ name: h.name, handle: h });
+          this.list.sort((a,b) => a.name.localeCompare(b.name));
+          log(`Loaded ${this.list.length} app(s) from file picker.`);
+          toast(`Loaded ${this.list.length} app(s)`);
+          return this.list.length;
+        }
+      } catch (e) {
+        log("File picker cancelled/blocked: " + (e?.message || e));
+      }
+      toast("App loading not available here");
+      log("App loading not available: needs Chrome with File System Access API.");
+      return 0;
+    },
+    // name shown in OS: strip extension and trim
+    label(name) {
+      return String(name).replace(/\.(html?|HTML?)$/,"").slice(0,7).toUpperCase();
+    }
+  };
+
+  // DOM web window manager (simple)
+  let webZ = 10000;
+  function openWebApp(app) {
+    // app: {name, handle}
+    const win = document.createElement("div");
+    win.className = "webwin";
+    win.style.zIndex = String(++webZ);
+
+    // Cascade placement
+    const rect = webWindows.getBoundingClientRect();
+    const left = 12 + (webZ % 7) * 10;
+    const top  = 12 + (webZ % 9) * 10;
+    win.style.left = left + "px";
+    win.style.top  = top + "px";
+
+    const header = document.createElement("div");
+    header.className = "webwinHeader";
+    header.innerHTML = `
+      <div class="webwinTitle">${escapeHtml(app.name)}</div>
+      <div class="webwinBtns">
+        <button class="webbtn" data-act="reload">↻</button>
+        <button class="webbtn" data-act="close">✕</button>
+      </div>
+    `;
+    const body = document.createElement("div");
+    body.className = "webwinBody";
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("referrerpolicy","no-referrer");
+    iframe.setAttribute("sandbox",
+      "allow-scripts allow-forms allow-modals allow-downloads allow-popups allow-popups-to-escape-sandbox allow-same-origin"
+    );
+    body.appendChild(iframe);
+    win.appendChild(header);
+    win.appendChild(body);
+    webWindows.appendChild(win);
+
+    async function load() {
+      try {
+        const file = await app.handle.getFile();
+        const text = await file.text();
+        iframe.srcdoc = text;
+        toast("Opened: " + app.name);
+      } catch (e) {
+        toast("Failed to open app");
+        log("Open app failed: " + (e?.message || e));
+      }
+    }
+    load();
+
+    header.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const act = btn.dataset.act;
+        if (act === "close") win.remove();
+        if (act === "reload") load();
+      });
+    });
+
+    // bring to front
+    win.addEventListener("pointerdown", () => win.style.zIndex = String(++webZ));
+
+    // drag
+    makeDomDraggable(header, win);
+  }
+
+  function makeDomDraggable(handle, el) {
+    let dragging = false, sx=0, sy=0, ox=0, oy=0;
+    handle.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      dragging = true;
+      el.style.zIndex = String(++webZ);
+      handle.setPointerCapture(e.pointerId);
+      sx = e.clientX; sy = e.clientY;
+      const r = el.getBoundingClientRect();
+      ox = r.left; oy = r.top;
+    });
+    handle.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - sx, dy = e.clientY - sy;
+      const nx = Math.max(6, Math.min(window.innerWidth - el.offsetWidth - 6, ox + dx));
+      const ny = Math.max(6, Math.min(window.innerHeight - el.offsetHeight - 6, oy + dy));
+      el.style.left = nx + "px";
+      el.style.top  = ny + "px";
+    });
+    handle.addEventListener("pointerup", (e) => {
+      dragging = false;
+      try { handle.releasePointerCapture(e.pointerId); } catch {}
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s || "")
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;");
+  }
+
+
+  // ============================================================
+  // 1) PPU-ish tile engine (paletted)
+  //    - Screen: W x H
+  //    - Tile grid: (W/T) x (H/T), T=8
+  //    - Tile registry: unique 8x8 tiles stored once
+  //    - Framebuffer: paletted indices (Uint8Array), plus RGBA ImageData for display
+  //    - Dirty tiles: only changed tiles are blitted into framebuffer
+  // ============================================================
+  const canvas = $("screen");
+  const ctx = canvas.getContext("2d", { alpha: false });
+  const W = canvas.width, H = canvas.height;
+  const T = 8;
+  const TX = Math.floor(W / T), TY = Math.floor(H / T);
+
+  // Palette: 256 entries (GIF-friendly). We'll use first ~24.
+  const palette = new Uint8Array(256 * 3);
+  function setPal(i, r, g, b){ palette[i*3]=r; palette[i*3+1]=g; palette[i*3+2]=b; }
+  // A compact dark UI palette
+  setPal(0, 0,0,0);
+  setPal(1, 15,15,18);
+  setPal(2, 30,30,36);
+  setPal(3, 52,52,64);
+  setPal(4, 90,90,110);
+  setPal(5, 140,140,165);
+  setPal(6, 220,220,235);
+  setPal(7, 255,255,255);
+  setPal(8, 40,160,255);   // blue
+  setPal(9, 255,160,60);   // orange
+  setPal(10, 120,255,170); // mint
+  setPal(11, 255,90,120);  // pink
+  setPal(12, 180,120,255); // purple
+  setPal(13, 120,200,255); // sky
+  setPal(14, 255,220,120); // sand
+  setPal(15, 90,255,120);  // green
+  // fill rest with a grayscale ramp (optional)
+  for (let i=16;i<256;i++){
+    const v = Math.max(0, Math.min(255, Math.round((i-16) / (256-16) * 255)));
+    setPal(i, v, v, v);
+  }
+
+  // Framebuffers
+  const fbIdx = new Uint8Array(W * H);            // palette indices
+  const img = ctx.createImageData(W, H);          // RGBA for display
+  const rgba = img.data;
+
+  // Tile map (screen = indices into tile registry)
+  const tileMap = new Uint16Array(TX * TY);
+  const dirty = new Uint8Array(TX * TY); // 0/1
+  let dirtyCount = 0;
+
+  // Tile registry: each tile is 64 bytes of palette indices.
+  // Dedup by key (string). For speed: key = bytes joined with ',' (fine at this scale).
+  const tiles = [];           // Array<Uint8Array(64)>
+  const tileKeyToId = new Map();
+
+  function tileKey(bytes) {
+    // small & fast key: base64 of bytes
+    let s = "";
+    for (let i=0;i<64;i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s);
+  }
+
+  function registerTile(bytes) {
+    const k = tileKey(bytes);
+    const hit = tileKeyToId.get(k);
+    if (hit !== undefined) return hit;
+    const id = tiles.length;
+    tiles.push(bytes);
+    tileKeyToId.set(k, id);
+    return id;
+  }
+
+  function markDirty(tx, ty) {
+    if (tx<0||ty<0||tx>=TX||ty>=TY) return;
+    const i = ty*TX + tx;
+    if (dirty[i] === 0) { dirty[i] = 1; dirtyCount++; }
+  }
+
+  function setTile(tx, ty, tileId) {
+    if (tx<0||ty<0||tx>=TX||ty>=TY) return;
+    const i = ty*TX + tx;
+    if (tileMap[i] !== tileId) {
+      tileMap[i] = tileId;
+      markDirty(tx, ty);
+    }
+  }
+
+  function clearDirtyAll() {
+    dirty.fill(1);
+    dirtyCount = TX*TY;
+  }
+
+  function blitDirtyTiles() {
+    if (dirtyCount === 0) return 0;
+    let updated = 0;
+
+    for (let ty=0; ty<TY; ty++) {
+      for (let tx=0; tx<TX; tx++) {
+        const di = ty*TX + tx;
+        if (!dirty[di]) continue;
+
+        const tileId = tileMap[di];
+        const tile = tiles[tileId] || tiles[0];
+        // write paletted pixels to fbIdx and rgba
+        const x0 = tx*T, y0 = ty*T;
+
+        let p = 0;
+        for (let y=0; y<T; y++) {
+          const row = (y0+y)*W + x0;
+          const rowRGBA = (row)*4;
+          for (let x=0; x<T; x++) {
+            const idx = tile[p++];
+            fbIdx[row + x] = idx;
+            const off = rowRGBA + x*4;
+            rgba[off]   = palette[idx*3];
+            rgba[off+1] = palette[idx*3+1];
+            rgba[off+2] = palette[idx*3+2];
+            rgba[off+3] = 255;
+          }
+        }
+        dirty[di] = 0;
+        updated++;
+      }
+    }
+
+    dirtyCount = 0;
+    return updated;
+  }
+
+  function present() {
+    ctx.putImageData(img, 0, 0);
+  }
+
+  // ============================================================
+  // 2) Tiny bitmap font (5x7) -> tiles/sprites
+  // ============================================================
+  const FONT = {
+    " ": [0,0,0,0,0,0,0],
+    "A": [0x0E,0x11,0x11,0x1F,0x11,0x11,0x11],
+    "B": [0x1E,0x11,0x11,0x1E,0x11,0x11,0x1E],
+    "C": [0x0E,0x11,0x10,0x10,0x10,0x11,0x0E],
+    "D": [0x1C,0x12,0x11,0x11,0x11,0x12,0x1C],
+    "E": [0x1F,0x10,0x10,0x1E,0x10,0x10,0x1F],
+    "F": [0x1F,0x10,0x10,0x1E,0x10,0x10,0x10],
+    "G": [0x0E,0x11,0x10,0x17,0x11,0x11,0x0F],
+    "H": [0x11,0x11,0x11,0x1F,0x11,0x11,0x11],
+    "I": [0x0E,0x04,0x04,0x04,0x04,0x04,0x0E],
+    "J": [0x07,0x02,0x02,0x02,0x12,0x12,0x0C],
+    "K": [0x11,0x12,0x14,0x18,0x14,0x12,0x11],
+    "L": [0x10,0x10,0x10,0x10,0x10,0x10,0x1F],
+    "M": [0x11,0x1B,0x15,0x11,0x11,0x11,0x11],
+    "N": [0x11,0x19,0x15,0x13,0x11,0x11,0x11],
+    "O": [0x0E,0x11,0x11,0x11,0x11,0x11,0x0E],
+    "P": [0x1E,0x11,0x11,0x1E,0x10,0x10,0x10],
+    "Q": [0x0E,0x11,0x11,0x11,0x15,0x12,0x0D],
+    "R": [0x1E,0x11,0x11,0x1E,0x14,0x12,0x11],
+    "S": [0x0F,0x10,0x10,0x0E,0x01,0x01,0x1E],
+    "T": [0x1F,0x04,0x04,0x04,0x04,0x04,0x04],
+    "U": [0x11,0x11,0x11,0x11,0x11,0x11,0x0E],
+    "V": [0x11,0x11,0x11,0x11,0x11,0x0A,0x04],
+    "W": [0x11,0x11,0x11,0x11,0x15,0x1B,0x11],
+    "X": [0x11,0x11,0x0A,0x04,0x0A,0x11,0x11],
+    "Y": [0x11,0x11,0x0A,0x04,0x04,0x04,0x04],
+    "Z": [0x1F,0x01,0x02,0x04,0x08,0x10,0x1F],
+    "0": [0x0E,0x11,0x13,0x15,0x19,0x11,0x0E],
+    "1": [0x04,0x0C,0x04,0x04,0x04,0x04,0x0E],
+    "2": [0x0E,0x11,0x01,0x02,0x04,0x08,0x1F],
+    "3": [0x1F,0x02,0x04,0x02,0x01,0x11,0x0E],
+    "4": [0x02,0x06,0x0A,0x12,0x1F,0x02,0x02],
+    "5": [0x1F,0x10,0x1E,0x01,0x01,0x11,0x0E],
+    "6": [0x06,0x08,0x10,0x1E,0x11,0x11,0x0E],
+    "7": [0x1F,0x01,0x02,0x04,0x08,0x08,0x08],
+    "8": [0x0E,0x11,0x11,0x0E,0x11,0x11,0x0E],
+    "9": [0x0E,0x11,0x11,0x0F,0x01,0x02,0x0C],
+    ".": [0x00,0x00,0x00,0x00,0x00,0x06,0x06],
+    ":": [0x00,0x06,0x06,0x00,0x06,0x06,0x00],
+    "-": [0x00,0x00,0x00,0x1F,0x00,0x00,0x00],
+    "_": [0x00,0x00,0x00,0x00,0x00,0x00,0x1F],
+    "/": [0x01,0x02,0x04,0x08,0x10,0x00,0x00],
+    "[": [0x0E,0x08,0x08,0x08,0x08,0x08,0x0E],
+    "]": [0x0E,0x02,0x02,0x02,0x02,0x02,0x0E],
+    "(": [0x06,0x08,0x10,0x10,0x10,0x08,0x06],
+    ")": [0x0C,0x02,0x01,0x01,0x01,0x02,0x0C],
+    "!": [0x04,0x04,0x04,0x04,0x04,0x00,0x04],
+    "?": [0x0E,0x11,0x01,0x02,0x04,0x00,0x04],
+  };
+
+  function drawCharToTileBytes(ch, fg=7, bg=1) {
+    const bytes = new Uint8Array(64);
+    const rows = FONT[ch] || FONT["?"];
+    // tile background
+    bytes.fill(bg);
+    // render 5x7 at (1,0) with 1px left pad and 1px bottom pad
+    for (let y=0; y<7; y++) {
+      const row = rows[y] || 0;
+      for (let x=0; x<5; x++) {
+        const on = (row >> (4-x)) & 1;
+        if (on) {
+          const tx = 1 + x;
+          const ty = 0 + y;
+          bytes[ty*8 + tx] = fg;
+        }
+      }
+    }
+    return bytes;
+  }
+
+  // Cache char tiles (fg/bg combos we use)
+  const charTileCache = new Map(); // key: ch|fg|bg -> tileId
+  function getCharTile(ch, fg=7, bg=1) {
+    const k = `${ch}|${fg}|${bg}`;
+    const hit = charTileCache.get(k);
+    if (hit !== undefined) return hit;
+    const id = registerTile(drawCharToTileBytes(ch, fg, bg));
+    charTileCache.set(k, id);
+    return id;
+  }
+
+  // ============================================================
+  // 3) OS primitives: rect fills, text, panels, buttons
+  //    Everything maps to tiles.
+  // ============================================================
+  function solidTile(colorIdx) {
+    const b = new Uint8Array(64);
+    b.fill(colorIdx);
+    return registerTile(b);
+  }
+  const TILE_BG = solidTile(1);
+  const TILE_BG2 = solidTile(2);
+  const TILE_PANEL = solidTile(2);
+  const TILE_PANEL2 = solidTile(3);
+  const TILE_WHITE = solidTile(7);
+
+  function drawRectTiles(x, y, w, h, tileId) {
+    // coords in tiles
+    for (let ty=y; ty<y+h; ty++) for (let tx=x; tx<x+w; tx++) setTile(tx, ty, tileId);
+  }
+
+  function drawText(tx, ty, text, fg=7, bg=1) {
+    const s = String(text || "");
+    for (let i=0;i<s.length;i++) {
+      const ch = s[i].toUpperCase();
+      setTile(tx+i, ty, getCharTile(ch, fg, bg));
+    }
+  }
+
+  // A simple beveled button 2 tiles tall
+  function buttonTilePair(label, fg=7, bg=3) {
+    // return [topRowTileId, bottomRowTileId] for a 1x2 tile "button cell"
+    // We'll draw label separately; these are background with bevel lines.
+    const top = new Uint8Array(64); top.fill(bg);
+    const bot = new Uint8Array(64); bot.fill(bg);
+    // bevel
+    for (let x=0;x<8;x++){ top[x]=4; }                // top highlight
+    for (let y=0;y<8;y++){ top[y*8]=4; bot[y*8]=4; } // left highlight
+    for (let x=0;x<8;x++){ bot[(7)*8 + x]=1; }        // bottom shadow
+    for (let y=0;y<8;y++){ top[y*8+7]=1; bot[y*8+7]=1; } // right shadow
+    return [registerTile(top), registerTile(bot)];
+  }
+  const [BTN_TOP, BTN_BOT] = buttonTilePair("");
+
+  // ============================================================
+  // 4) GIF-OS state machine
+  // ============================================================
+  const OS = {
+    booted: false,
+    demo: false,
+    time: 0,
+    cursor: { x: 120, y: 80, down: false },
+    startOpen: false,
+    icons: [
+      { id:"NOTEPAD", x: 2, y: 2, glyph:"N", label:"NOTEPAD" },
+      { id:"DEMO", x: 2, y: 6, glyph:"D", label:"DEMO" },
+    ],
+    loadedApps: [], // populated via Load Apps button/menu
+    menuItems: [],
+    windows: [], // {id,title,x,y,w,h,drag,bodyLines[],scroll}
+    focusWin: null,
+  };
+
+  function resetOS() {
+    OS.booted = false;
+    OS.demo = false;
+    OS.time = 0;
+    OS.startOpen = false;
+    OS.windows = [];
+    OS.focusWin = null;
+    OS.cursor = { x: 120, y: 80, down: false };
+    tiles.length = 0;
+    tileKeyToId.clear();
+    charTileCache.clear();
+
+    // Re-register essential tiles after clearing registry
+    // (solidTile uses registerTile, so we recreate constants)
+    // Easiest: reload page? Instead: we just re-run solid tiles now.
+    // We'll just store ids in a fresh object and reference it via closures.
+  }
+
+  // Because we cleared tiles on reset, we need to rebuild the solid tiles and button tiles too.
+  // We'll do that in boot() which reconstructs palette-backed tiles.
+
+  let TILE = {}; // updated in boot
+
+  function boot() {
+    // ensure base tiles exist
+    TILE = {
+      BG: solidTile(1),
+      BG2: solidTile(2),
+      PANEL: solidTile(2),
+      PANEL2: solidTile(3),
+      WHITE: solidTile(7),
+      CURSOR: (() => {
+        const b = new Uint8Array(64); b.fill(0);
+        // crosshair
+        for (let i=0;i<8;i++) { b[3*8+i]=7; b[i*8+3]=7; }
+        b[3*8+3]=11;
+        return registerTile(b);
+      })(),
+      ICON: (() => {
+        const b = new Uint8Array(64); b.fill(2);
+        // border
+        for (let x=0;x<8;x++){ b[x]=4; b[7*8+x]=1; }
+        for (let y=0;y<8;y++){ b[y*8]=4; b[y*8+7]=1; }
+        return registerTile(b);
+      })(),
+      TASKBAR: solidTile(2),
+      BTN_TOP: (() => {
+        const top = new Uint8Array(64); top.fill(3);
+        for (let x=0;x<8;x++){ top[x]=4; }
+        for (let y=0;y<8;y++){ top[y*8]=4; top[y*8+7]=1; }
+        return registerTile(top);
+      })(),
+      BTN_BOT: (() => {
+        const bot = new Uint8Array(64); bot.fill(3);
+        for (let x=0;x<8;x++){ bot[7*8+x]=1; }
+        for (let y=0;y<8;y++){ bot[y*8]=4; bot[y*8+7]=1; }
+        return registerTile(bot);
+      })(),
+      WIN_BG: solidTile(1),
+      WIN_BAR: solidTile(3),
+      WIN_BODY: solidTile(2),
+    };
+
+    OS.booted = true;
+    OS.demo = false;
+    OS.startOpen = false;
+    OS.windows = [];
+    OS.focusWin = null;
+
+    // Clear screen
+    for (let i=0;i<TX*TY;i++) tileMap[i] = TILE.BG;
+    clearDirtyAll();
+
+    drawDesktop();
+    presentTick(true);
+
+    log("Boot complete. Tap Start (bottom-left in screen).");
+    toast("Booted");
+  }
+
+  function drawDesktop() {
+    // background
+    drawRectTiles(0,0,TX,TY, TILE.BG);
+    // subtle vignette by swapping some edges
+    for (let x=0;x<TX;x++){ setTile(x,0,TILE.BG2); setTile(x,TY-1,TILE.BG2); }
+    for (let y=0;y<TY;y++){ setTile(0,y,TILE.BG2); setTile(TX-1,y,TILE.BG2); }
+
+    // icons
+    for (const ic of OS.icons) {
+      // (fixed icons first)
+
+      setTile(ic.x, ic.y, TILE.ICON);
+      drawText(ic.x, ic.y, ic.glyph, 10, 2);
+      drawText(ic.x+2, ic.y, ic.glyph, 10, 2); // bolder-ish
+      drawText(ic.x, ic.y+1, ic.label.slice(0,7), 6, 1);
+
+    }
+
+    // dynamic app icons (loaded from folder)
+    // place in a simple grid on the left
+    if (OS.loadedApps && OS.loadedApps.length) {
+      const startX = 8, startY = 2;
+      const cols = Math.max(1, Math.floor((TX - startX - 1) / 2));
+      for (let i=0;i<OS.loadedApps.length;i++) {
+        const app = OS.loadedApps[i];
+        const gx = startX + (i % cols) * 2;
+        const gy = startY + Math.floor(i / cols) * 3;
+        if (gy >= TY-5) break;
+        setTile(gx, gy, TILE.ICON);
+        drawText(gx, gy, app.glyph, 13, 2);
+        drawText(gx, gy+1, app.label.slice(0,7), 6, 1);
+      }
+    }
+
+    // taskbar (2 tiles tall)
+    const tbY = TY-2;
+    drawRectTiles(0, tbY, TX, 2, TILE.TASKBAR);
+
+    // Start button: 6 tiles wide x 2 tall, at (0,tbY)
+    for (let x=0;x<6;x++){ setTile(x, tbY, TILE.BTN_TOP); setTile(x, tbY+1, TILE.BTN_BOT); }
+    drawText(1, tbY, "START", 7, 3);
+
+    // clock on right
+    const time = new Date();
+    const hh = String(time.getHours()).padStart(2,"0");
+    const mm = String(time.getMinutes()).padStart(2,"0");
+    const clock = `${hh}:${mm}`;
+    drawText(TX - clock.length - 2, tbY, clock, 6, 2);
+
+    // start menu (if open)
+    if (OS.startOpen) drawStartMenu();
+  }
+
+  function drawStartMenu() {
+    const tbY = TY-2;
+
+    // Build menu items dynamically
+    const items = [];
+    items.push({ type:"action", id:"LOADAPPS", label:"LOAD APPS" });
+    items.push({ type:"action", id:"NOTEPAD",  label:"NOTEPAD" });
+    items.push({ type:"action", id:"DEMO",     label:"DEMO" });
+
+    // Add loaded apps (up to 6 visible slots after header)
+    if (OS.loadedApps && OS.loadedApps.length) {
+      for (const a of OS.loadedApps) {
+        items.push({ type:"app", id:a.id, label:a.label, app:a });
+      }
+    }
+
+    items.push({ type:"action", id:"CLOSE", label:"CLOSE" });
+
+    // Keep a copy for hit-testing
+    OS.menuItems = items;
+
+    // Menu geometry: header 2 tiles + N items (2 tiles each), cap to fit
+    const maxItems = Math.min(items.length, 6); // visible rows
+    const menuW = 18;
+    const menuH = 2 + maxItems*2;
+    const mx = 0, my = tbY - menuH;
+
+    drawRectTiles(mx, my, menuW, menuH, TILE.PANEL);
+    drawRectTiles(mx, my, menuW, 2, TILE.PANEL2);
+    drawText(mx+1, my, "START MENU", 7, 3);
+
+    for (let i=0;i<maxItems;i++) {
+      const it = items[i];
+      const yy = my + 2 + i*2;
+      drawText(mx+1, yy, (it.label || "").padEnd(menuW-2," ").slice(0,menuW-2), 6, 2);
+      const hint = (it.type === "app") ? "OPEN HTML APP" : "TAP";
+      drawText(mx+1, yy+1, hint.padEnd(menuW-2," ").slice(0,menuW-2), 4, 1);
+    }
+  }
+
+  function openNotepad() {
+    const win = {
+      id: "NOTEPAD",
+      title: "NOTEPAD",
+      x: 6, y: 3, w: 20, h: 10, // in tiles
+      dragging: false, dragOffX:0, dragOffY:0,
+      bodyLines: [
+        "GIF-OS NOTEPAD",
+        "",
+        "This OS is tiles + deltas.",
+        "Next: filesystem vault, apps.",
+        "",
+        "Tap title bar and drag.",
+      ],
+      scroll: 0
+    };
+    OS.windows.push(win);
+    OS.focusWin = win.id;
+    OS.startOpen = false;
+    redrawAll();
+    toast("Notepad opened");
+  }
+
+  function toggleDemo() {
+    OS.demo = !OS.demo;
+    toast(OS.demo ? "Demo animation on" : "Demo animation off");
+    log("Demo: " + (OS.demo ? "ON" : "OFF"));
+  }
+
+  function redrawAll() {
+    drawDesktop();
+    drawWindows();
+    drawCursor();
+    clearDirtyAll();
+    presentTick(true);
+  }
+
+  function drawWindows() {
+    for (const win of OS.windows) {
+      const {x,y,w,h} = win;
+      // window background
+      drawRectTiles(x,y,w,h, TILE.WIN_BG);
+      // title bar (2 tiles)
+      drawRectTiles(x,y,w,2, TILE.WIN_BAR);
+      drawText(x+1, y, win.title.padEnd(w-2," ").slice(0,w-2), 7, 3);
+      // close button at right
+      setTile(x+w-2, y, getCharTile("X", 11, 3));
+      // body
+      drawRectTiles(x,y+2,w,h-2, TILE.WIN_BODY);
+      // body text
+      const maxLines = h-3;
+      for (let i=0;i<maxLines;i++) {
+        const line = win.bodyLines[win.scroll + i] || "";
+        drawText(x+1, y+2+i, line.padEnd(w-2," ").slice(0,w-2), 6, 2);
+      }
+    }
+  }
+
+  function drawCursor() {
+    // cursor is drawn as tile overlay at its tile position (simple)
+    const tx = Math.floor(OS.cursor.x / T);
+    const ty = Math.floor(OS.cursor.y / T);
+    setTile(tx, ty, TILE.CURSOR);
+    markDirty(tx, ty);
+  }
+
+  // ============================================================
+  // 5) Input mapping (touch/mouse) -> tile-space hit tests
+  // ============================================================
+  function screenToPx(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const x = (clientX - rect.left) * (W / rect.width);
+    const y = (clientY - rect.top) * (H / rect.height);
+    return { x: Math.max(0, Math.min(W-1, x)), y: Math.max(0, Math.min(H-1, y)) };
+  }
+
+  function hitStartButton(px, py) {
+    const tbY = TY-2;
+    const tx = Math.floor(px / T);
+    const ty = Math.floor(py / T);
+    return (ty === tbY || ty === tbY+1) && tx >= 0 && tx < 6;
+  }
+
+  function hitStartMenuItem(px, py) {
+    if (!OS.startOpen) return null;
+    const tbY = TY-2;
+
+    const items = OS.menuItems || [];
+    const maxItems = Math.min(items.length, 6);
+    const menuW = 18;
+    const menuH = 2 + maxItems*2;
+    const mx = 0, my = tbY - menuH;
+
+    const tx = Math.floor(px / T);
+    const ty = Math.floor(py / T);
+    if (tx < mx || tx >= mx+menuW || ty < my || ty >= my+menuH) return null;
+
+    const relY = ty - (my + 2);
+    if (relY < 0) return null;
+    const idx = Math.floor(relY / 2);
+    if (idx < 0 || idx >= maxItems) return null;
+    return items[idx] || null;
+  }
+
+  function hitIcon(px, py) {
+    const tx = Math.floor(px / T);
+    const ty = Math.floor(py / T);
+
+    // fixed icons
+    for (const ic of OS.icons) {
+      if (tx === ic.x && ty === ic.y) return { type:"action", id: ic.id };
+    }
+
+    // dynamic icons grid
+    if (OS.loadedApps && OS.loadedApps.length) {
+      const startX = 8, startY = 2;
+      const cols = Math.max(1, Math.floor((TX - startX - 1) / 2));
+      for (let i=0;i<OS.loadedApps.length;i++) {
+        const app = OS.loadedApps[i];
+        const gx = startX + (i % cols) * 2;
+        const gy = startY + Math.floor(i / cols) * 3;
+        if (gy >= TY-5) break;
+        if (tx === gx && ty === gy) return { type:"app", app };
+      }
+    }
+    return null;
+  }
+
+  function hitWindowTitle(px, py) {
+    const tx = Math.floor(px / T);
+    const ty = Math.floor(py / T);
+    // check topmost last
+    for (let i=OS.windows.length-1;i>=0;i--) {
+      const w = OS.windows[i];
+      if (tx >= w.x && tx < w.x+w.w && (ty === w.y || ty === w.y+1)) {
+        // close hit?
+        if (tx === w.x+w.w-2 && ty === w.y) return { type:"close", win:w };
+        return { type:"drag", win:w, offX: tx - w.x, offY: ty - w.y };
+      }
+    }
+    return null;
+  }
+
+  function bringToFront(win) {
+    const idx = OS.windows.indexOf(win);
+    if (idx >= 0 && idx !== OS.windows.length-1) {
+      OS.windows.splice(idx, 1);
+      OS.windows.push(win);
+    }
+    OS.focusWin = win.id;
+  }
+
+  function closeWin(win) {
+    const idx = OS.windows.indexOf(win);
+    if (idx >= 0) OS.windows.splice(idx, 1);
+    OS.focusWin = OS.windows.length ? OS.windows[OS.windows.length-1].id : null;
+    redrawAll();
+    toast("Window closed");
+  }
+
+  let activeDrag = null; // { win, offX, offY }
+  function onDown(px, py) {
+    OS.cursor.down = true;
+
+    // Start
+    if (hitStartButton(px, py)) {
+      OS.startOpen = !OS.startOpen;
+      redrawAll();
+      toast(OS.startOpen ? "Menu open" : "Menu closed");
+      return;
+    }
+
+    // Start menu item
+    const item = hitStartMenuItem(px, py);
+    if (item) {
+      if (item.type === "action" && item.id === "NOTEPAD") openNotepad();
+      if (item.type === "action" && item.id === "DEMO") toggleDemo();
+      if (item.type === "action" && item.id === "CLOSE") { OS.startOpen = false; redrawAll(); }
+      if (item.type === "action" && item.id === "LOADAPPS") {
+        OS.startOpen = false;
+        redrawAll();
+        (async () => {
+          const n = await LoadedApps.pick();
+          if (n > 0) {
+            // Add to OS registry list
+            OS.loadedApps = LoadedApps.list.map((a, idx) => ({
+              id: "APP_" + idx,
+              name: a.name,
+              handle: a.handle,
+              label: LoadedApps.label(a.name),
+              glyph: LoadedApps.label(a.name).slice(0,1) || "A"
+            }));
+            log("Apps available in Start menu and desktop grid.");
+            redrawAll();
+          }
+        })();
+      }
+      if (item.type === "app" && item.app) {
+        OS.startOpen = false;
+        redrawAll();
+        openWebApp(item.app);
+      }
+      return;
+    }
+
+    // Window title drag/close
+    const hitW = hitWindowTitle(px, py);
+    if (hitW) {
+      bringToFront(hitW.win);
+      if (hitW.type === "close") {
+        closeWin(hitW.win);
+        return;
+      }
+      activeDrag = { win: hitW.win, offX: hitW.offX, offY: hitW.offY };
+      hitW.win.dragging = true;
+      redrawAll();
+      return;
+    }
+
+    // Icon click
+    const icon = hitIcon(px, py);
+    if (icon) {
+      if (icon.type === "action" && icon.id === "NOTEPAD") openNotepad();
+      if (icon.type === "action" && icon.id === "DEMO") toggleDemo();
+      if (icon.type === "app" && icon.app) openWebApp(icon.app);
+      return;
+    }
+
+    // click outside closes menu
+    if (OS.startOpen) {
+      OS.startOpen = false;
+      redrawAll();
+    }
+  }
+
+  function onMove(px, py) {
+    OS.cursor.x = px; OS.cursor.y = py;
+
+    if (activeDrag && activeDrag.win) {
+      const tx = Math.floor(px / T);
+      const ty = Math.floor(py / T);
+      const nx = Math.max(1, Math.min(TX - activeDrag.win.w - 1, tx - activeDrag.offX));
+      const ny = Math.max(1, Math.min(TY - activeDrag.win.h - 3, ty - activeDrag.offY)); // keep above taskbar
+      if (nx !== activeDrag.win.x || ny !== activeDrag.win.y) {
+        activeDrag.win.x = nx;
+        activeDrag.win.y = ny;
+        redrawAll();
+      } else {
+        // just cursor redraw
+        drawDesktop(); drawWindows(); drawCursor();
+        clearDirtyAll();
+      }
+    } else {
+      // cursor only
+      drawDesktop();
+      drawWindows();
+      drawCursor();
+      clearDirtyAll();
+    }
+  }
+
+  function onUp() {
+    OS.cursor.down = false;
+    if (activeDrag?.win) activeDrag.win.dragging = false;
+    activeDrag = null;
+  }
+
+  // Canvas event wiring
+  canvas.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    canvas.setPointerCapture(e.pointerId);
+    const p = screenToPx(e.clientX, e.clientY);
+    onDown(p.x, p.y);
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    e.preventDefault();
+    const p = screenToPx(e.clientX, e.clientY);
+    onMove(p.x, p.y);
+  });
+  canvas.addEventListener("pointerup", (e) => {
+    e.preventDefault();
+    onUp();
+    try { canvas.releasePointerCapture(e.pointerId); } catch {}
+  });
+  canvas.addEventListener("pointercancel", (e) => { onUp(); });
+
+  // ============================================================
+  // 6) Main loop: delta redraw + optional demo animation
+  // ============================================================
+  let lastTS = performance.now();
+  let fpsEMA = 0;
+  let anim = false;
+  let bounce = { x: 12, y: 6, vx: 1, vy: 1 }; // tile coords for demo icon
+
+  function tick(ts) {
+    if (!anim) return;
+    const dt = Math.max(0.001, (ts - lastTS) / 1000);
+    lastTS = ts;
+    const fps = 1/dt;
+    fpsEMA = fpsEMA ? (0.85*fpsEMA + 0.15*fps) : fps;
+    $("fps").textContent = fpsEMA.toFixed(1);
+
+    // If not booted, just present idle
+    if (!OS.booted) {
+      requestAnimationFrame(tick);
+      return;
+    }
+
+    OS.time += dt;
+
+    // Demo: move an icon around (tile-space), only dirty tiles affected via redrawAll (simple)
+    if (OS.demo) {
+      // erase old by redrawing desktop each frame is expensive; but with tile engine it's okay.
+      // We'll do a proper delta: change only two tiles (old and new).
+      const oldX = bounce.x, oldY = bounce.y;
+
+      bounce.x += bounce.vx;
+      bounce.y += bounce.vy;
+      if (bounce.x <= 1 || bounce.x >= TX-2) bounce.vx *= -1;
+      if (bounce.y <= 1 || bounce.y >= TY-4) bounce.vy *= -1;
+
+      // Restore old tile from background (approx: use BG; better: re-render desktop tile there)
+      // For correctness, redraw desktop once when demo toggled on/off; then do local overwrite.
+      // We'll overwrite the moving glyph tile only.
+      setTile(oldX, oldY, TILE.BG);
+      setTile(bounce.x, bounce.y, TILE.ICON);
+      // draw letter
+      drawText(bounce.x, bounce.y, "D", 14, 2);
+
+      // cursor + taskbar clock refresh occasionally
+      if (Math.floor(OS.time*2) % 2 === 0) {
+        drawDesktop(); // updates clock + menu if open
+        drawWindows();
+      }
+      drawCursor();
+    } else {
+      // update clock every second
+      if (Math.floor(OS.time) !== Math.floor(OS.time - dt)) {
+        drawDesktop();
+        drawWindows();
+        drawCursor();
+        clearDirtyAll();
+      }
+    }
+
+    // Blit dirty tiles and present
+    const updatedTiles = blitDirtyTiles();
+    $("dirty").textContent = String(updatedTiles);
+    present();
+
+    // Recorder capture
+    if (REC.active) REC.captureFrame();
+
+    requestAnimationFrame(tick);
+  }
+
+  function presentTick(forceAll=false) {
+    if (forceAll) clearDirtyAll();
+    const updated = blitDirtyTiles();
+    $("dirty").textContent = String(updated);
+    present();
+  }
+
+  function startLoop() {
+    if (anim) return;
+    anim = true;
+    lastTS = performance.now();
+    requestAnimationFrame(tick);
+  }
+
+  function stopLoop() {
+    anim = false;
+  }
+
+  // ============================================================
+  // 7) GIF Recorder (paletted, local-only)
+  //    Format: GIF89a, global color table, frames via LZW
+  // ============================================================
+  const REC = {
+    active: false,
+    frames: [], // { idx: Uint8Array(W*H), delayCs }
+    lastCap: 0,
+    fps: 12,
+    maxFrames: 180, // safety (15s at 12fps)
+    captureFrame() {
+      const now = performance.now();
+      const interval = 1000 / this.fps;
+      if (now - this.lastCap < interval) return;
+      this.lastCap = now;
+      if (this.frames.length >= this.maxFrames) { this.stop(); toast("Recorder max frames"); return; }
+      // Copy current framebuffer indices
+      const snap = new Uint8Array(fbIdx); // clone
+      this.frames.push({ idx: snap, delayCs: Math.round(100/this.fps) }); // centiseconds
+      $("rec").textContent = `rec ${this.frames.length}`;
+    },
+    start() {
+      if (!OS.booted) { toast("Boot first"); return; }
+      this.frames = [];
+      this.lastCap = 0;
+      this.active = true;
+      $("rec").textContent = "rec 0";
+      toast("Recording…");
+      log("Recorder started at " + this.fps + " fps.");
+    },
+    stop() {
+      this.active = false;
+      $("rec").textContent = `stopped (${this.frames.length})`;
+      toast("Recording stopped");
+      log("Recorder stopped. Frames: " + this.frames.length);
+    },
+    exportGIF() {
+      if (!this.frames.length) { toast("No frames"); return; }
+      const bytes = buildGIF(this.frames, W, H, palette);
+      const blob = new Blob([bytes], { type: "image/gif" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "gif-os.gif";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      toast("GIF exported");
+      log("GIF exported: " + bytes.length + " bytes.");
+    }
+  };
+
+  // --- GIF encoding helpers ---
+  function u16le(n){ return [n & 255, (n>>8) & 255]; }
+
+  function buildGIF(frames, w, h, palRGB) {
+    // Use 256-color global table (768 bytes) already provided.
+    // LZW min code size = 8 (since indices are 0..255).
+    const out = [];
+    // Header
+    pushStr(out, "GIF89a");
+    out.push(...u16le(w), ...u16le(h));
+    // Logical Screen Descriptor:
+    // packed: GlobalColorTableFlag=1, ColorRes=7 (8 bits), Sort=0, GCTSize=7 (2^(7+1)=256)
+    out.push(0b11110111);
+    out.push(0); // background color index
+    out.push(0); // pixel aspect ratio
+    // Global Color Table
+    for (let i=0;i<256*3;i++) out.push(palRGB[i] ?? 0);
+
+    // Looping (NETSCAPE2.0)
+    out.push(0x21, 0xFF, 0x0B);
+    pushStr(out, "NETSCAPE2.0");
+    out.push(0x03, 0x01, 0x00, 0x00, 0x00); // loop forever
+
+    // Frames
+    for (const fr of frames) {
+      // Graphics Control Extension
+      out.push(0x21, 0xF9, 0x04);
+      const packed = 0b00000000; // no transparency, no disposal
+      out.push(packed);
+      out.push(...u16le(fr.delayCs)); // delay in cs
+      out.push(0); // transparent index
+      out.push(0); // block terminator
+
+      // Image Descriptor
+      out.push(0x2C);
+      out.push(...u16le(0), ...u16le(0), ...u16le(w), ...u16le(h));
+      out.push(0x00); // no local color table
+
+      // Image Data
+      out.push(8); // LZW min code size
+      const lzw = gifLZW(fr.idx, 8);
+      // sub-blocks (max 255)
+      let i=0;
+      while (i < lzw.length) {
+        const n = Math.min(255, lzw.length - i);
+        out.push(n);
+        for (let j=0;j<n;j++) out.push(lzw[i+j]);
+        i += n;
+      }
+      out.push(0); // terminator
+    }
+
+    // Trailer
+    out.push(0x3B);
+    return new Uint8Array(out);
+  }
+
+  function pushStr(arr, s){ for (let i=0;i<s.length;i++) arr.push(s.charCodeAt(i)); }
+
+  // LZW encoder for GIF (byte stream)
+  // This is a standard dictionary-based LZW for GIF with clear/end codes.
+  function gifLZW(indexStream, minCodeSize) {
+    const CLEAR = 1 << minCodeSize;   // 256
+    const END   = CLEAR + 1;          // 257
+    let codeSize = minCodeSize + 1;   // 9
+    let dictSize = END + 1;           // 258
+
+    // dictionary: map string -> code
+    // We'll represent strings as "a,b,c" keys. It's not ultra-fast but fine at 256x144 and short clips.
+    const dict = new Map();
+    function resetDict() {
+      dict.clear();
+      for (let i=0;i<CLEAR;i++) dict.set(String.fromCharCode(i), i);
+      dictSize = END + 1;
+      codeSize = minCodeSize + 1;
+    }
+    resetDict();
+
+    const outBits = [];
+    function pushCode(code) {
+      for (let i=0;i<codeSize;i++) outBits.push((code >> i) & 1); // LSB first
+    }
+
+    pushCode(CLEAR);
+
+    // Build codes
+    let w = String.fromCharCode(indexStream[0]);
+    for (let i=1;i<indexStream.length;i++) {
+      const k = String.fromCharCode(indexStream[i]);
+      const wk = w + k;
+      if (dict.has(wk)) {
+        w = wk;
+      } else {
+        pushCode(dict.get(w));
+        dict.set(wk, dictSize++);
+
+        // grow code size as dict grows
+        if (dictSize === (1 << codeSize) && codeSize < 12) codeSize++;
+
+        // GIF requires clear when dict full (4096)
+        if (dictSize >= 4096) {
+          pushCode(CLEAR);
+          resetDict();
+        }
+        w = k;
+      }
+    }
+    pushCode(dict.get(w));
+    pushCode(END);
+
+    // Pack bits into bytes
+    const out = [];
+    let b = 0, bit = 0;
+    for (let i=0;i<outBits.length;i++) {
+      b |= (outBits[i] & 1) << bit;
+      bit++;
+      if (bit === 8) { out.push(b); b=0; bit=0; }
+    }
+    if (bit > 0) out.push(b);
+
+    return new Uint8Array(out);
+  }
+
+  // ============================================================
+  // 8) Controls
+  // ============================================================
+  $("btnBoot").addEventListener("click", () => { boot(); startLoop(); });
+  $("btnLoadApps").addEventListener("click", async () => {
+    const n = await LoadedApps.pick();
+    if (n > 0) {
+      OS.loadedApps = LoadedApps.list.map((a, idx) => ({
+        id: "APP_" + idx,
+        name: a.name,
+        handle: a.handle,
+        label: LoadedApps.label(a.name),
+        glyph: LoadedApps.label(a.name).slice(0,1) || "A"
+      }));
+      if (!OS.booted) boot();
+      redrawAll();
+    }
+  });
+
+  $("btnReset").addEventListener("click", () => { location.reload(); });
+  $("btnDemo").addEventListener("click", () => { if (!OS.booted) boot(); toggleDemo(); });
+  $("btnNotepad").addEventListener("click", () => { if (!OS.booted) boot(); openNotepad(); });
+  $("btnAbout").addEventListener("click", () => {
+    alert(
+`GIF‑OS Prototype (single-file)
+
+This is a “GIF‑architecture OS” skeleton:
+• Screen = paletted framebuffer
+• Renderer = 8x8 tiles + dedup registry
+• Updates = dirty-tile delta blits
+• Optional recorder exports a real animated GIF (GIF89a) locally
+
+Next steps:
+1) filesystem-backed “vault” directory
+2) app packaging as tile sprites + delta scripts
+3) stronger PPU model: prime-coded tile IDs + CAM-like registry`
+    );
+  });
+
+  $("btnRec").addEventListener("click", () => { REC.start(); });
+  $("btnStop").addEventListener("click", () => { REC.stop(); });
+  $("btnExport").addEventListener("click", () => { REC.exportGIF(); });
+
+  $("btnHelp").addEventListener("click", () => {
+    alert(
+`Controls:
+• Tap Start (bottom-left) to open Menu
+• Tap Notepad or Demo
+• Drag window by title bar
+• Record/Stop/Export to get an animated GIF of the OS
+
+If Start doesn’t respond, you’re probably opening via a content:// viewer.
+Open the HTML directly in Chrome or “Open with Chrome” from Downloads.`
+    );
+  });
+
+  // Boot minimal to show something even before pressing Boot
+  (function coldSplash(){
+    // init with a simple splash in tiles
+    // Ensure at least one tile exists
+    const splashBG = solidTile(1);
+    for (let i=0;i<TX*TY;i++) tileMap[i] = splashBG;
+    clearDirtyAll();
+    drawText(6, 7, "GIF-OS", 7, 1);
+    drawText(3, 9, "PRESS BOOT", 6, 1);
+    blitDirtyTiles();
+    present();
+    $("fps").textContent = "—";
+    $("dirty").textContent = "—";
+    $("rec").textContent = "idle";
+    log("Loaded. Press Boot to initialize the OS state machine.");
+  })();
+
+})();
+</script>
+</body>
+</html>
