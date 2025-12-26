@@ -1,0 +1,1312 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <title>BAZ Analogue Quantum (GIF-Life) — Single File</title>
+  <meta name="theme-color" content="#0b0f14"/>
+  <style>
+    :root{
+      --bg:#0b0f14; --panel:#0f1620; --panel2:#0d131c; --txt:#e8eef7; --muted:#9fb0c6;
+      --acc:#6ae3ff; --acc2:#b8ff6a; --warn:#ffcc66; --bad:#ff6a8b;
+      --bd:rgba(255,255,255,.10); --bd2:rgba(255,255,255,.06);
+      --shadow: 0 14px 40px rgba(0,0,0,.45);
+      --r:18px;
+      font-synthesis-weight:none;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%; margin:0; background:var(--bg); color:var(--txt); font: 14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    button,input,select{font:inherit}
+    a{color:var(--acc); text-decoration:none}
+    .app{
+      height:100%;
+      display:grid;
+      grid-template-columns: 360px 1fr;
+      gap:14px;
+      padding:14px;
+    }
+    @media (max-width: 980px){
+      .app{grid-template-columns: 1fr; grid-template-rows: auto 1fr}
+    }
+    .panel{
+      background:linear-gradient(180deg,var(--panel),var(--panel2));
+      border:1px solid var(--bd2);
+      border-radius: var(--r);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .panel .hdr{
+      padding:14px 14px 10px;
+      border-bottom:1px solid var(--bd2);
+      display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+    }
+    .title{font-weight:800; letter-spacing:.2px}
+    .subtitle{color:var(--muted); font-size:12px; margin-top:4px}
+    .pill{
+      padding:6px 10px; border:1px solid var(--bd);
+      border-radius:999px; color:var(--muted); font-size:12px;
+      background: rgba(255,255,255,.03);
+      white-space:nowrap;
+    }
+    .body{padding:14px}
+    .grid{display:grid; gap:10px}
+    .row{display:grid; grid-template-columns: 1fr 1fr; gap:10px}
+    .row3{display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px}
+    .field{background: rgba(255,255,255,.03); border:1px solid var(--bd2); border-radius: 14px; padding:10px}
+    .field label{display:flex; justify-content:space-between; color:var(--muted); font-size:12px; margin-bottom:6px}
+    .field input[type="range"]{width:100%}
+    .field input[type="number"], .field select, .field input[type="text"]{
+      width:100%; background: rgba(0,0,0,.25); color:var(--txt);
+      border:1px solid var(--bd2); border-radius: 12px; padding:8px 10px;
+      outline:none;
+    }
+    .btnbar{display:flex; flex-wrap:wrap; gap:8px}
+    .btn{
+      cursor:pointer;
+      border:1px solid var(--bd);
+      border-radius: 14px;
+      padding:10px 12px;
+      background: rgba(255,255,255,.05);
+      color:var(--txt);
+      transition: transform .06s ease, background .15s ease, border-color .15s ease;
+      user-select:none;
+    }
+    .btn:hover{background: rgba(255,255,255,.08)}
+    .btn:active{transform: translateY(1px)}
+    .btn.primary{border-color: rgba(106,227,255,.55); background: rgba(106,227,255,.10)}
+    .btn.good{border-color: rgba(184,255,106,.50); background: rgba(184,255,106,.10)}
+    .btn.warn{border-color: rgba(255,204,102,.55); background: rgba(255,204,102,.10)}
+    .btn.bad{border-color: rgba(255,106,139,.55); background: rgba(255,106,139,.10)}
+    .small{font-size:12px; color:var(--muted)}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace}
+    .canvasWrap{
+      display:flex; flex-direction:column; gap:12px; height:100%;
+    }
+    .stage{
+      flex:1; min-height: 320px;
+      display:grid; grid-template-rows: auto 1fr auto;
+    }
+    .stageTop{
+      padding:12px 14px;
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      border-bottom:1px solid var(--bd2);
+    }
+    .stageBottom{
+      padding:10px 14px;
+      border-top:1px solid var(--bd2);
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      flex-wrap:wrap;
+    }
+    .metrics{display:flex; gap:10px; flex-wrap:wrap; color:var(--muted); font-size:12px}
+    canvas{
+      width:100%; height:100%;
+      display:block;
+      background:#000;
+    }
+    .hint{color:var(--muted); font-size:12px}
+    .kbd{border:1px solid var(--bd); padding:1px 6px; border-radius:8px; background: rgba(255,255,255,.04); font-family: ui-monospace, monospace}
+  </style>
+</head>
+<body>
+<div class="app">
+  <section class="panel">
+    <div class="hdr">
+      <div>
+        <div class="title">BAZ Analogue Quantum (GIF-Life)</div>
+        <div class="subtitle">A Pixel‑Life reaction–diffusion core + prime‑weighted “D2D” broadcast + optional Bas‑warp view.</div>
+      </div>
+      <div class="pill mono" id="buildPill">single-file</div>
+    </div>
+    <div class="body">
+      <div class="grid">
+
+        <div class="btnbar">
+          <button class="btn primary" id="btnStart">Start</button>
+          <button class="btn" id="btnStep">Step</button>
+          <button class="btn" id="btnReset">Reset</button>
+          <button class="btn warn" id="btnMeasure">Measure / Collapse</button>
+          <button class="btn good" id="btnSeed">Seed</button>
+          <button class="btn" id="btnClear">Clear</button>
+        </div>
+
+        <div class="field">
+          <label><span>Mode</span><span class="mono" id="modeLbl"></span></label>
+          <select id="mode">
+            <option value="pixellife">Pixel‑Life (reaction–diffusion RGB)</option>
+            <option value="primewave">Prime‑Wave (prime-weight diffusion + phase bands)</option>
+            <option value="baswarp">Bas‑Warp View (anisotropic “Bas Laplacian” warp)</option>
+            <option value="life">Classic Life (binary GoL)</option>
+          </select>
+          <div class="small" style="margin-top:6px">
+            Draw on the canvas: <span class="kbd">tap/drag</span>. Erase: <span class="kbd">two-finger / right-click</span>.
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label><span>Grid</span><span class="mono" id="gridLbl"></span></label>
+            <input id="grid" type="range" min="64" max="256" step="16" value="160"/>
+            <div class="small">Internal lattice is square (N×N). Bigger = slower.</div>
+          </div>
+          <div class="field">
+            <label><span>FPS cap</span><span class="mono" id="fpsLbl"></span></label>
+            <input id="fps" type="range" min="10" max="60" step="1" value="30"/>
+            <div class="small">Runs at requestAnimationFrame but throttled to this cap.</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label><span>Δt</span><span class="mono" id="dtLbl"></span></label>
+            <input id="dt" type="range" min="0.05" max="0.8" step="0.01" value="0.25"/>
+            <div class="small">Integrator step (larger = faster & more unstable).</div>
+          </div>
+          <div class="field">
+            <label><span>γ diffusion</span><span class="mono" id="gammaLbl"></span></label>
+            <input id="gamma" type="range" min="0.00" max="0.60" step="0.01" value="0.12"/>
+            <div class="small">Discrete Laplacian coupling strength.</div>
+          </div>
+        </div>
+
+        <div class="row3">
+          <div class="field">
+            <label><span>k1 (R→G)</span><span class="mono" id="k1Lbl"></span></label>
+            <input id="k1" type="range" min="0.00" max="1.20" step="0.01" value="0.50"/>
+          </div>
+          <div class="field">
+            <label><span>k2 (G→B)</span><span class="mono" id="k2Lbl"></span></label>
+            <input id="k2" type="range" min="0.00" max="1.20" step="0.01" value="0.45"/>
+          </div>
+          <div class="field">
+            <label><span>k3 (B→R)</span><span class="mono" id="k3Lbl"></span></label>
+            <input id="k3" type="range" min="0.00" max="1.20" step="0.01" value="0.48"/>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label><span>β homeostasis</span><span class="mono" id="betaLbl"></span></label>
+            <input id="beta" type="range" min="0.00" max="0.25" step="0.005" value="0.05"/>
+            <div class="small">Pulls state back toward the initial “image.”</div>
+          </div>
+          <div class="field">
+            <label><span>σ noise</span><span class="mono" id="sigmaLbl"></span></label>
+            <input id="sigma" type="range" min="0.00" max="0.03" step="0.001" value="0.006"/>
+            <div class="small">Adds controlled jitter (proto-life variability).</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label><span>Prime carriers</span><span class="mono" id="primeLbl"></span></label>
+          <div class="row">
+            <div>
+              <input id="np" type="range" min="4" max="16" step="1" value="8"/>
+              <div class="small">Np = number of primes used for broadcast weights.</div>
+            </div>
+            <div>
+              <input id="bands" type="range" min="2" max="31" step="1" value="11"/>
+              <div class="small">Phase-bands m (mod-as-filter / quantization).</div>
+            </div>
+          </div>
+          <div class="small mono" id="primeVec" style="margin-top:6px; overflow:auto; max-height:66px"></div>
+        </div>
+
+        <div class="field">
+          <label><span>Performance</span><span class="mono" id="perfLbl"></span></label>
+          <div class="row">
+            <div>
+              <select id="sparseMode">
+                <option value="off">Dense update (all cells)</option>
+                <option value="on">Sparse update (PPU-style active list)</option>
+              </select>
+              <div class="small">Sparse mode updates only “active” cells + neighbors.</div>
+            </div>
+            <div>
+              <input id="eps" type="range" min="0.0005" max="0.02" step="0.0005" value="0.004"/>
+              <div class="small">ε activity threshold (bigger = fewer updates).</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="btnbar">
+          <button class="btn" id="btnExportGif">Export 3s GIF</button>
+          <button class="btn" id="btnExportPng">Snapshot PNG</button>
+          <button class="btn" id="btnHelp">Help</button>
+        </div>
+
+        <div class="small">
+          Tip: In “Prime‑Wave”, crank <span class="mono">Np</span> and <span class="mono">bands</span>, seed a few blobs, then hit <span class="mono">Measure</span> to see collapses.
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <section class="panel canvasWrap">
+    <div class="stage panel">
+      <div class="stageTop">
+        <div>
+          <div class="title" style="font-size:14px">Canvas</div>
+          <div class="subtitle" id="status">Idle.</div>
+        </div>
+        <div class="pill mono" id="clockLbl">t=0</div>
+      </div>
+
+      <canvas id="cv"></canvas>
+
+      <div class="stageBottom">
+        <div class="metrics">
+          <span>updates: <span class="mono" id="mUpd">0</span></span>
+          <span>active: <span class="mono" id="mAct">0</span></span>
+          <span>step ms: <span class="mono" id="mMs">0</span></span>
+          <span>prob Σ: <span class="mono" id="mNorm">1.000</span></span>
+        </div>
+        <div class="hint">
+          Keys: <span class="kbd">space</span> start/stop · <span class="kbd">s</span> step · <span class="kbd">r</span> reset · <span class="kbd">m</span> measure · <span class="kbd">g</span> export GIF
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- utilities ----------
+  const clamp01 = (x) => x < 0 ? 0 : (x > 1 ? 1 : x);
+  const randn = () => {
+    // Box-Muller
+    let u=0, v=0; while(u===0) u=Math.random(); while(v===0) v=Math.random();
+    return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+  };
+  const now = () => performance.now();
+
+  function primesFirst(n){
+    const out=[];
+    let x=2;
+    while(out.length<n){
+      let ok=true;
+      for(let p of out){
+        if(p*p>x) break;
+        if(x%p===0){ok=false; break;}
+      }
+      if(ok) out.push(x);
+      x++;
+    }
+    return out;
+  }
+
+  // ---------- DOM ----------
+  const $ = (id) => document.getElementById(id);
+  const cv = $("cv");
+  const ctx = cv.getContext("2d", {alpha:false, desynchronized:true});
+  const statusEl = $("status");
+
+  const modeSel = $("mode");
+  const gridR = $("grid");
+  const fpsR = $("fps");
+  const dtR = $("dt");
+  const gammaR = $("gamma");
+  const k1R = $("k1");
+  const k2R = $("k2");
+  const k3R = $("k3");
+  const betaR = $("beta");
+  const sigmaR = $("sigma");
+  const npR = $("np");
+  const bandsR = $("bands");
+  const sparseSel = $("sparseMode");
+  const epsR = $("eps");
+
+  const lbl = (el, val) => el.textContent = val;
+  const modeLbl = $("modeLbl");
+  const gridLbl = $("gridLbl");
+  const fpsLbl = $("fpsLbl");
+  const dtLbl = $("dtLbl");
+  const gammaLbl = $("gammaLbl");
+  const k1Lbl = $("k1Lbl");
+  const k2Lbl = $("k2Lbl");
+  const k3Lbl = $("k3Lbl");
+  const betaLbl = $("betaLbl");
+  const sigmaLbl = $("sigmaLbl");
+  const primeLbl = $("primeLbl");
+  const primeVec = $("primeVec");
+  const perfLbl = $("perfLbl");
+  const clockLbl = $("clockLbl");
+
+  const mUpd = $("mUpd");
+  const mAct = $("mAct");
+  const mMs = $("mMs");
+  const mNorm = $("mNorm");
+
+  $("buildPill").textContent = "build " + (new Date()).toISOString().slice(0,10);
+
+  // ---------- simulation state ----------
+  let N = parseInt(gridR.value, 10);
+  let t = 0;
+  let running = false;
+
+  // RGB fields in [0,1]
+  let R = null, G = null, B = null;
+  let R0 = null, G0 = null, B0 = null;
+
+  // Life binary
+  let L = null, Lnext = null;
+
+  // Active list (sparse mode)
+  let active = null;      // Uint8Array flags
+  let activeList = [];    // indices (approx)
+  let activeCount = 0;
+
+  // prime weights
+  let primes = primesFirst(parseInt(npR.value,10));
+  let dPr = [];
+  let w8 = []; // 8-neighbor kernel weights
+  function rebuildPrimeWeights(){
+    primes = primesFirst(parseInt(npR.value,10));
+    dPr = [];
+    for(let i=0;i<primes.length-1;i++) dPr.push(primes[i+1]-primes[i]);
+    if(dPr.length===0) dPr=[1];
+
+    // Map first 8 deltas (wrap if needed) into 8-neighbor weights
+    w8 = [];
+    let s=0;
+    for(let i=0;i<8;i++){
+      const v = dPr[i % dPr.length];
+      w8.push(v);
+      s += v;
+    }
+    // normalize
+    for(let i=0;i<8;i++) w8[i] /= s;
+
+    primeLbl.textContent = `p=[${primes.join(",")}]`;
+    primeVec.textContent =
+      `p: ${primes.join(", ")}\n` +
+      `Δp: ${dPr.join(", ")}\n` +
+      `w8: ${w8.map(x=>x.toFixed(4)).join(", ")}   (normalized from Δp)`;
+  }
+  rebuildPrimeWeights();
+
+  function alloc(){
+    const sz = N*N;
+    R = new Float32Array(sz);
+    G = new Float32Array(sz);
+    B = new Float32Array(sz);
+    R0 = new Float32Array(sz);
+    G0 = new Float32Array(sz);
+    B0 = new Float32Array(sz);
+
+    L = new Uint8Array(sz);
+    Lnext = new Uint8Array(sz);
+
+    active = new Uint8Array(sz);
+    activeList = [];
+    activeCount = 0;
+
+    // init “image”: subtle gradient + noise
+    for(let y=0;y<N;y++){
+      for(let x=0;x<N;x++){
+        const i = y*N+x;
+        const fx = x/(N-1), fy = y/(N-1);
+        const base = 0.15 + 0.25*(fx*(1-fy) + 0.15*Math.sin(2*Math.PI*fy));
+        const n = 0.02*randn();
+        R[i] = clamp01(base + 0.10*fx + n);
+        G[i] = clamp01(base + 0.08*fy + n);
+        B[i] = clamp01(base + 0.06*(1-fx) + n);
+
+        R0[i]=R[i]; G0[i]=G[i]; B0[i]=B[i];
+        L[i] = (Math.random() < 0.10) ? 1 : 0;
+      }
+    }
+    t=0;
+    lbl(clockLbl, "t=0");
+    markAllActive();
+  }
+
+  function markAllActive(){
+    active.fill(1);
+    activeList = [];
+    activeCount = N*N;
+  }
+
+  function markActive(i){
+    if(active[i]===0){
+      active[i]=1;
+      activeList.push(i);
+      activeCount++;
+    }
+  }
+
+  // ---------- drawing / input ----------
+  function resizeCanvas(){
+    const rect = cv.getBoundingClientRect();
+    const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
+    cv.width = Math.floor(rect.width*dpr);
+    cv.height = Math.floor(rect.height*dpr);
+    ctx.imageSmoothingEnabled = false;
+  }
+  window.addEventListener("resize", resizeCanvas, {passive:true});
+
+  function idxFromCanvas(clientX, clientY){
+    const rect = cv.getBoundingClientRect();
+    const x = Math.floor((clientX - rect.left) / rect.width * N);
+    const y = Math.floor((clientY - rect.top) / rect.height * N);
+    if(x<0||y<0||x>=N||y>=N) return -1;
+    return y*N + x;
+  }
+
+  let drawing = false;
+  let erase = false;
+
+  function applyBrush(i){
+    if(i<0) return;
+    const mode = modeSel.value;
+    const radius = Math.max(1, Math.floor(N/80));
+    const cx = i%N, cy = (i/N)|0;
+    for(let dy=-radius; dy<=radius; dy++){
+      for(let dx=-radius; dx<=radius; dx++){
+        const x = cx+dx, y = cy+dy;
+        if(x<0||y<0||x>=N||y>=N) continue;
+        if(dx*dx+dy*dy > radius*radius) continue;
+        const j = y*N+x;
+
+        if(mode==="life"){
+          L[j] = erase ? 0 : 1;
+        }else{
+          const a = erase ? 0.0 : 1.0;
+          // inject a “packet” as a colored blob
+          R[j] = clamp01(R[j]*(1-a) + a*(0.95));
+          G[j] = clamp01(G[j]*(1-a) + a*(0.25));
+          B[j] = clamp01(B[j]*(1-a) + a*(0.10));
+        }
+
+        // active around brush
+        markActive(j);
+        if(x>0) markActive(j-1);
+        if(x<N-1) markActive(j+1);
+        if(y>0) markActive(j-N);
+        if(y<N-1) markActive(j+N);
+      }
+    }
+  }
+
+  cv.addEventListener("pointerdown", (e) => {
+    cv.setPointerCapture(e.pointerId);
+    drawing = true;
+    erase = (e.button===2) || e.ctrlKey || e.metaKey;
+    applyBrush(idxFromCanvas(e.clientX, e.clientY));
+  });
+  cv.addEventListener("pointermove", (e) => {
+    if(!drawing) return;
+    applyBrush(idxFromCanvas(e.clientX, e.clientY));
+  });
+  cv.addEventListener("pointerup", () => { drawing=false; });
+  cv.addEventListener("contextmenu", (e)=>e.preventDefault());
+
+  // touch: two-finger = erase
+  cv.addEventListener("touchstart", (e)=>{
+    if(e.touches && e.touches.length>=2) erase=true;
+  }, {passive:true});
+  cv.addEventListener("touchend", (e)=>{
+    if(!(e.touches && e.touches.length>=2)) erase=false;
+  }, {passive:true});
+
+  // ---------- core math (Pixel‑Life / Prime‑Wave / Bas‑Warp) ----------
+  function laplace4(field, i){
+    const x=i%N, y=(i/N)|0;
+    const c = field[i];
+    let s = -4*c;
+    if(x>0) s += field[i-1]; else s += field[i];
+    if(x<N-1) s += field[i+1]; else s += field[i];
+    if(y>0) s += field[i-N]; else s += field[i];
+    if(y<N-1) s += field[i+N]; else s += field[i];
+    return s;
+  }
+
+  // 8-neighbor weighted laplacian using w8 (normalized)
+  function laplacePrime8(field, i){
+    const x=i%N, y=(i/N)|0;
+    const c = field[i];
+    // neighbors order: NW N NE W E SW S SE
+    let sum = 0;
+    // NW
+    sum += w8[0] * field[(y>0? y-1:y)*N + (x>0? x-1:x)];
+    // N
+    sum += w8[1] * field[(y>0? y-1:y)*N + x];
+    // NE
+    sum += w8[2] * field[(y>0? y-1:y)*N + (x<N-1? x+1:x)];
+    // W
+    sum += w8[3] * field[y*N + (x>0? x-1:x)];
+    // E
+    sum += w8[4] * field[y*N + (x<N-1? x+1:x)];
+    // SW
+    sum += w8[5] * field[(y<N-1? y+1:y)*N + (x>0? x-1:x)];
+    // S
+    sum += w8[6] * field[(y<N-1? y+1:y)*N + x];
+    // SE
+    sum += w8[7] * field[(y<N-1? y+1:y)*N + (x<N-1? x+1:x)];
+    // Laplacian-ish: neighbor_avg - center
+    return (sum - c);
+  }
+
+  // “Bas warp” anisotropy: stretch diffusion along a swirl field (cheap stand-in for Bas-coordinate curvature)
+  function laplaceBasWarp(field, i){
+    const x=i%N, y=(i/N)|0;
+    const fx = (x/(N-1))*2-1;
+    const fy = (y/(N-1))*2-1;
+    const r = Math.sqrt(fx*fx+fy*fy) + 1e-6;
+    const ang = Math.atan2(fy, fx);
+
+    // anisotropy direction (tangent to circles) + radial component
+    const tx = -Math.sin(ang), ty = Math.cos(ang);
+    const rx = fx/r, ry = fy/r;
+
+    // sample offsets (nearest)
+    const step = 1;
+    const x1 = Math.max(0, Math.min(N-1, Math.round(x + step*tx)));
+    const y1 = Math.max(0, Math.min(N-1, Math.round(y + step*ty)));
+    const x2 = Math.max(0, Math.min(N-1, Math.round(x - step*tx)));
+    const y2 = Math.max(0, Math.min(N-1, Math.round(y - step*ty)));
+
+    const x3 = Math.max(0, Math.min(N-1, Math.round(x + step*rx)));
+    const y3 = Math.max(0, Math.min(N-1, Math.round(y + step*ry)));
+    const x4 = Math.max(0, Math.min(N-1, Math.round(x - step*rx)));
+    const y4 = Math.max(0, Math.min(N-1, Math.round(y - step*ry)));
+
+    const c = field[i];
+    const tang = (field[y1*N+x1] + field[y2*N+x2] - 2*c);
+    const rad  = (field[y3*N+x3] + field[y4*N+x4] - 2*c);
+
+    // more diffusion tangentially near center, more radial far out (just for visual richness)
+    const a = Math.exp(-2*r*r);
+    return (0.75*a)*tang + (0.35*(1-a))*rad;
+  }
+
+  function quantizeBands(x, m){
+    // “mod-as-filter” style banding: keep x in [0,1] but snap to m bands
+    const q = Math.floor(x*m);
+    return (q / (m-1));
+  }
+
+  function pixellifeStep(indices){
+    const dt = parseFloat(dtR.value);
+    const gamma = parseFloat(gammaR.value);
+    const k1 = parseFloat(k1R.value);
+    const k2 = parseFloat(k2R.value);
+    const k3 = parseFloat(k3R.value);
+    const beta = parseFloat(betaR.value);
+    const sigma = parseFloat(sigmaR.value);
+
+    let updates = 0;
+    for(const i of indices){
+      const r = R[i], g = G[i], b = B[i];
+
+      // RGB cycle reactions: R->G->B->R
+      const dr = (-k1*r + k3*b);
+      const dg = ( k1*r - k2*g);
+      const db = ( k2*g - k3*b);
+
+      const lr = laplace4(R, i);
+      const lg = laplace4(G, i);
+      const lb = laplace4(B, i);
+
+      // homeostasis toward initial image
+      const fr = -beta*(r - R0[i]);
+      const fg = -beta*(g - G0[i]);
+      const fb = -beta*(b - B0[i]);
+
+      // update
+      const nr = clamp01(r + dt*(dr + gamma*lr + fr) + sigma*randn());
+      const ng = clamp01(g + dt*(dg + gamma*lg + fg) + sigma*randn());
+      const nb = clamp01(b + dt*(db + gamma*lb + fb) + sigma*randn());
+
+      const dmag = Math.abs(nr-r)+Math.abs(ng-g)+Math.abs(nb-b);
+      R[i]=nr; G[i]=ng; B[i]=nb;
+      updates++;
+
+      // activity tracking
+      if(sparseSel.value==="on"){
+        const eps = parseFloat(epsR.value);
+        if(dmag > eps){
+          // mark neighbors active
+          const x=i%N, y=(i/N)|0;
+          for(let yy=Math.max(0,y-1); yy<=Math.min(N-1,y+1); yy++){
+            for(let xx=Math.max(0,x-1); xx<=Math.min(N-1,x+1); xx++){
+              markActive(yy*N+xx);
+            }
+          }
+        }
+      }
+    }
+    return updates;
+  }
+
+  function primewaveStep(indices){
+    const dt = parseFloat(dtR.value);
+    const gamma = parseFloat(gammaR.value);
+    const k1 = parseFloat(k1R.value);
+    const k2 = parseFloat(k2R.value);
+    const k3 = parseFloat(k3R.value);
+    const beta = parseFloat(betaR.value);
+    const sigma = parseFloat(sigmaR.value);
+    const m = parseInt(bandsR.value,10);
+
+    let updates=0;
+
+    for(const i of indices){
+      const r = R[i], g = G[i], b = B[i];
+
+      // prime-weighted diffusion
+      const lr = laplacePrime8(R, i);
+      const lg = laplacePrime8(G, i);
+      const lb = laplacePrime8(B, i);
+
+      // same RGB cycle
+      const dr = (-k1*r + k3*b);
+      const dg = ( k1*r - k2*g);
+      const db = ( k2*g - k3*b);
+
+      // homeostasis
+      const fr = -beta*(r - R0[i]);
+      const fg = -beta*(g - G0[i]);
+      const fb = -beta*(b - B0[i]);
+
+      // update + “phase bands”
+      let nr = clamp01(r + dt*(dr + gamma*lr + fr) + sigma*randn());
+      let ng = clamp01(g + dt*(dg + gamma*lg + fg) + sigma*randn());
+      let nb = clamp01(b + dt*(db + gamma*lb + fb) + sigma*randn());
+
+      // quantize a little to create band-like interference
+      nr = quantizeBands(nr, m);
+      ng = quantizeBands(ng, m);
+      nb = quantizeBands(nb, m);
+
+      const dmag = Math.abs(nr-r)+Math.abs(ng-g)+Math.abs(nb-b);
+      R[i]=nr; G[i]=ng; B[i]=nb;
+      updates++;
+
+      if(sparseSel.value==="on"){
+        const eps = parseFloat(epsR.value);
+        if(dmag > eps){
+          const x=i%N, y=(i/N)|0;
+          for(let yy=Math.max(0,y-1); yy<=Math.min(N-1,y+1); yy++){
+            for(let xx=Math.max(0,x-1); xx<=Math.min(N-1,x+1); xx++){
+              markActive(yy*N+xx);
+            }
+          }
+        }
+      }
+    }
+    return updates;
+  }
+
+  function baswarpStep(indices){
+    const dt = parseFloat(dtR.value);
+    const gamma = parseFloat(gammaR.value);
+    const k1 = parseFloat(k1R.value);
+    const k2 = parseFloat(k2R.value);
+    const k3 = parseFloat(k3R.value);
+    const beta = parseFloat(betaR.value);
+    const sigma = parseFloat(sigmaR.value);
+
+    let updates=0;
+    for(const i of indices){
+      const r = R[i], g = G[i], b = B[i];
+
+      // warped laplacian
+      const lr = laplaceBasWarp(R, i);
+      const lg = laplaceBasWarp(G, i);
+      const lb = laplaceBasWarp(B, i);
+
+      // RGB cycle
+      const dr = (-k1*r + k3*b);
+      const dg = ( k1*r - k2*g);
+      const db = ( k2*g - k3*b);
+
+      // homeostasis
+      const fr = -beta*(r - R0[i]);
+      const fg = -beta*(g - G0[i]);
+      const fb = -beta*(b - B0[i]);
+
+      const nr = clamp01(r + dt*(dr + gamma*lr + fr) + sigma*randn());
+      const ng = clamp01(g + dt*(dg + gamma*lg + fg) + sigma*randn());
+      const nb = clamp01(b + dt*(db + gamma*lb + fb) + sigma*randn());
+
+      const dmag = Math.abs(nr-r)+Math.abs(ng-g)+Math.abs(nb-b);
+      R[i]=nr; G[i]=ng; B[i]=nb;
+      updates++;
+
+      if(sparseSel.value==="on"){
+        const eps = parseFloat(epsR.value);
+        if(dmag > eps){
+          const x=i%N, y=(i/N)|0;
+          for(let yy=Math.max(0,y-1); yy<=Math.min(N-1,y+1); yy++){
+            for(let xx=Math.max(0,x-1); xx<=Math.min(N-1,x+1); xx++){
+              markActive(yy*N+xx);
+            }
+          }
+        }
+      }
+    }
+    return updates;
+  }
+
+  function lifeStep(indices){
+    let updates=0;
+    // In Life mode we ignore sparse indices and just do full step (cheap enough)
+    for(let y=0;y<N;y++){
+      for(let x=0;x<N;x++){
+        const i = y*N+x;
+        let n=0;
+        for(let yy=Math.max(0,y-1); yy<=Math.min(N-1,y+1); yy++){
+          for(let xx=Math.max(0,x-1); xx<=Math.min(N-1,x+1); xx++){
+            if(xx===x && yy===y) continue;
+            n += L[yy*N+xx];
+          }
+        }
+        const alive = L[i]===1;
+        const next = (alive && (n===2||n===3)) || (!alive && n===3) ? 1 : 0;
+        Lnext[i]=next;
+        updates++;
+      }
+    }
+    const tmp=L; L=Lnext; Lnext=tmp;
+    return updates;
+  }
+
+  // “Quantum-ish” measurement: treat psi = (R-B) + i(G-0.5), sample by |psi|^2
+  function measurementCollapse(){
+    const sz=N*N;
+    let sum=0;
+    for(let i=0;i<sz;i++){
+      const re = (R[i]-B[i]);
+      const im = (G[i]-0.5);
+      sum += (re*re + im*im);
+    }
+    if(sum<=1e-12) return;
+
+    let r = Math.random()*sum;
+    let pick=0;
+    for(let i=0;i<sz;i++){
+      const re = (R[i]-B[i]);
+      const im = (G[i]-0.5);
+      r -= (re*re + im*im);
+      if(r<=0){ pick=i; break; }
+    }
+
+    // Collapse: set a narrow spike at pick, damp elsewhere
+    for(let i=0;i<sz;i++){
+      if(i===pick){
+        R[i]=0.95; G[i]=0.55; B[i]=0.05;
+      }else{
+        R[i]*=0.35; G[i]*=0.35; B[i]*=0.35;
+      }
+    }
+    // Update "initial" attractor slightly toward new state (memory-ish)
+    for(let i=0;i<sz;i++){
+      R0[i] = 0.97*R0[i] + 0.03*R[i];
+      G0[i] = 0.97*G0[i] + 0.03*G[i];
+      B0[i] = 0.97*B0[i] + 0.03*B[i];
+    }
+    markAllActive();
+  }
+
+  // ---------- rendering ----------
+  const img = {data:null, imgData:null};
+
+  function ensureImageData(){
+    if(!img.imgData || img.imgData.width!==N || img.imgData.height!==N){
+      img.imgData = new ImageData(N, N);
+      img.data = img.imgData.data;
+    }
+  }
+
+  function render(){
+    ensureImageData();
+    const mode = modeSel.value;
+    const d = img.data;
+
+    if(mode==="life"){
+      for(let i=0;i<N*N;i++){
+        const v = L[i] ? 255 : 0;
+        d[4*i+0]=v; d[4*i+1]=v; d[4*i+2]=v; d[4*i+3]=255;
+      }
+    }else{
+      // Show RGB directly, with a probability highlight overlay
+      // prob = |psi|^2 from (R-B, G-0.5)
+      let sum=0;
+      for(let i=0;i<N*N;i++){
+        const re = (R[i]-B[i]);
+        const im = (G[i]-0.5);
+        sum += re*re + im*im;
+      }
+      const inv = sum>1e-9 ? (1/sum) : 1;
+
+      for(let i=0;i<N*N;i++){
+        const r = R[i], g = G[i], b = B[i];
+        const re = (r-b);
+        const im = (g-0.5);
+        const p = Math.min(1, (re*re+im*im)*inv*8); // boosted
+        // probability “sparkle” into blue channel a bit
+        d[4*i+0] = (r*255)|0;
+        d[4*i+1] = (g*255)|0;
+        d[4*i+2] = clamp01(b + 0.35*p)*255|0;
+        d[4*i+3] = 255;
+      }
+      // display normalization
+      lbl(mNorm, (sum).toFixed(3));
+    }
+
+    // scale up to canvas
+    const cw = cv.width, ch = cv.height;
+    // draw into an offscreen (use ImageData scaling via putImageData then drawImage)
+    // Offscreen canvas for nearest-neighbor
+    if(!render.osc){
+      render.osc = document.createElement("canvas");
+      render.octx = render.osc.getContext("2d", {alpha:false});
+      render.octx.imageSmoothingEnabled = false;
+    }
+    const osc = render.osc, octx = render.octx;
+    if(osc.width!==N || osc.height!==N){
+      osc.width=N; osc.height=N;
+    }
+    octx.putImageData(img.imgData,0,0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(osc, 0,0, cw, ch);
+  }
+
+  // ---------- step scheduler ----------
+  let lastFrame = 0;
+  function getIndicesForStep(){
+    if(modeSel.value==="life") return null; // ignored
+    if(sparseSel.value!=="on"){
+      // dense
+      const out = new Array(N*N);
+      for(let i=0;i<N*N;i++) out[i]=i;
+      return out;
+    }
+    // sparse: use activeList (but if empty, do a small periodic refresh)
+    if(activeCount===0){
+      // nothing active; poke a few
+      const out=[];
+      for(let k=0;k<Math.min(256,N*N);k++){
+        out.push((Math.random()*N*N)|0);
+      }
+      return out;
+    }
+    // use and clear active flags
+    const out = activeList.length ? activeList : (() => {
+      // fallback: scan flags (rare)
+      const a=[];
+      for(let i=0;i<N*N;i++) if(active[i]) a.push(i);
+      return a;
+    })();
+    activeList = [];
+    active.fill(0);
+    const c = activeCount;
+    activeCount = 0;
+    lbl(mAct, String(c));
+    return out;
+  }
+
+  function stepOnce(){
+    const mode = modeSel.value;
+    const t0 = now();
+
+    let updates=0;
+    if(mode==="life"){
+      updates = lifeStep(null);
+      // keep clock in “frames”
+      t += 1;
+    }else{
+      const indices = getIndicesForStep();
+      if(mode==="pixellife") updates = pixellifeStep(indices);
+      else if(mode==="primewave") updates = primewaveStep(indices);
+      else if(mode==="baswarp") updates = baswarpStep(indices);
+      t += parseFloat(dtR.value);
+    }
+
+    lbl(mUpd, String(updates));
+    lbl(mMs, (now()-t0).toFixed(2));
+    lbl(clockLbl, "t=" + (mode==="life" ? t : t.toFixed(2)));
+    render();
+  }
+
+  function loop(ts){
+    if(!running) return;
+    const fpsCap = parseInt(fpsR.value,10);
+    const minDt = 1000 / fpsCap;
+    if(ts - lastFrame >= minDt){
+      lastFrame = ts;
+      stepOnce();
+      statusEl.textContent = "Running.";
+    }
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- buttons ----------
+  function start(){
+    if(running) return;
+    running = true;
+    statusEl.textContent = "Running.";
+    requestAnimationFrame(loop);
+    $("btnStart").textContent = "Stop";
+  }
+  function stop(){
+    running = false;
+    statusEl.textContent = "Paused.";
+    $("btnStart").textContent = "Start";
+  }
+
+  $("btnStart").addEventListener("click", ()=> running ? stop() : start());
+  $("btnStep").addEventListener("click", ()=> stepOnce());
+  $("btnReset").addEventListener("click", ()=> { alloc(); render(); statusEl.textContent="Reset."; });
+  $("btnClear").addEventListener("click", ()=> {
+    if(modeSel.value==="life"){
+      L.fill(0);
+    }else{
+      R.fill(0); G.fill(0); B.fill(0);
+      R0.fill(0); G0.fill(0); B0.fill(0);
+    }
+    markAllActive();
+    render();
+    statusEl.textContent="Cleared.";
+  });
+  $("btnMeasure").addEventListener("click", ()=> {
+    if(modeSel.value==="life") return;
+    measurementCollapse();
+    render();
+    statusEl.textContent="Measured / collapsed.";
+  });
+  $("btnSeed").addEventListener("click", ()=> {
+    seed();
+    render();
+    statusEl.textContent="Seeded.";
+  });
+
+  function seed(){
+    const mode = modeSel.value;
+    if(mode==="life"){
+      // classic Life patterns near center
+      const cx=(N/2)|0, cy=(N/2)|0;
+      const put=(x,y)=>{ if(x>=0&&y>=0&&x<N&&y<N) L[y*N+x]=1; };
+      // glider
+      put(cx+1,cy); put(cx+2,cy+1); put(cx,cy+2); put(cx+1,cy+2); put(cx+2,cy+2);
+      // small exploder
+      put(cx-10,cy-1); put(cx-9,cy-2); put(cx-8,cy-2); put(cx-8,cy-1); put(cx-8,cy); put(cx-9,cy); put(cx-10,cy);
+    }else{
+      // random blobs / sources
+      for(let k=0;k<10;k++){
+        const x=(Math.random()*N)|0, y=(Math.random()*N)|0;
+        const i=y*N+x;
+        const a = 0.4 + 0.6*Math.random();
+        R[i]=clamp01(R[i]+0.8*a);
+        G[i]=clamp01(G[i]+0.3*a);
+        B[i]=clamp01(B[i]+0.15*a);
+        markActive(i);
+      }
+    }
+    markAllActive();
+  }
+
+  // ---------- UI labels ----------
+  function refreshLabels(){
+    lbl(modeLbl, modeSel.value);
+    lbl(gridLbl, `${gridR.value}×${gridR.value}`);
+    lbl(fpsLbl, `${fpsR.value}`);
+    lbl(dtLbl, `${parseFloat(dtR.value).toFixed(2)}`);
+    lbl(gammaLbl, `${parseFloat(gammaR.value).toFixed(2)}`);
+    lbl(k1Lbl, `${parseFloat(k1R.value).toFixed(2)}`);
+    lbl(k2Lbl, `${parseFloat(k2R.value).toFixed(2)}`);
+    lbl(k3Lbl, `${parseFloat(k3R.value).toFixed(2)}`);
+    lbl(betaLbl, `${parseFloat(betaR.value).toFixed(3)}`);
+    lbl(sigmaLbl, `${parseFloat(sigmaR.value).toFixed(3)}`);
+    lbl(perfLbl, sparseSel.value + " ε=" + parseFloat(epsR.value).toFixed(4));
+  }
+
+  [modeSel, gridR, fpsR, dtR, gammaR, k1R, k2R, k3R, betaR, sigmaR, npR, bandsR, sparseSel, epsR].forEach(el=>{
+    el.addEventListener("input", ()=>{
+      refreshLabels();
+      if(el===npR){
+        rebuildPrimeWeights();
+        markAllActive();
+      }
+      if(el===gridR){
+        const newN = parseInt(gridR.value,10);
+        if(newN!==N){
+          N=newN;
+          alloc();
+          render();
+        }
+      }
+      if(el===modeSel){
+        statusEl.textContent = "Mode: " + modeSel.value;
+        markAllActive();
+        render();
+      }
+    });
+  });
+
+  // ---------- export helpers ----------
+  function downloadBlob(blob, filename){
+    const a=document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  $("btnExportPng").addEventListener("click", async () => {
+    const blob = await new Promise(res => cv.toBlob(res, "image/png"));
+    downloadBlob(blob, `baz-giflife-${Date.now()}.png`);
+  });
+
+  // Minimal GIF encoder (8-bit grayscale palette) for exporting the probability map
+  function gifEncode(frames, w, h, delayCs){
+    // frames: Uint8Array indices (0..255)
+    // GIF89a with global grayscale palette 256
+    const out = [];
+    const push = (...bytes)=>{ out.push(...bytes); };
+
+    const strBytes = (s)=>Array.from(s).map(ch=>ch.charCodeAt(0));
+
+    // Header
+    push(...strBytes("GIF89a"));
+
+    // Logical Screen Descriptor
+    // width, height
+    push(w & 255, (w>>8)&255, h & 255, (h>>8)&255);
+    // Packed: global color table flag=1, color res=7, sort=0, gct size=7 (2^(7+1)=256)
+    push(0b11110111);
+    // background color index
+    push(0);
+    // pixel aspect ratio
+    push(0);
+
+    // Global Color Table: grayscale
+    for(let i=0;i<256;i++){
+      push(i,i,i);
+    }
+
+    // Netscape loop extension
+    push(0x21,0xFF,0x0B, ...strBytes("NETSCAPE2.0"), 0x03,0x01, 0x00,0x00, 0x00);
+
+    // Each frame
+    for(const pix of frames){
+      // Graphics Control Extension
+      push(0x21,0xF9,0x04);
+      // Packed: no transparency, no disposal specified
+      push(0x00);
+      // delay in 1/100 sec
+      push(delayCs & 255, (delayCs>>8)&255);
+      // transparent index
+      push(0x00);
+      // terminator
+      push(0x00);
+
+      // Image Descriptor
+      push(0x2C);
+      // left, top
+      push(0,0,0,0);
+      // width,height
+      push(w & 255, (w>>8)&255, h & 255, (h>>8)&255);
+      // packed: no local color table
+      push(0x00);
+
+      // Image Data: LZW
+      const minCodeSize = 8;
+      push(minCodeSize);
+
+      const lzwData = lzwCompress(pix, minCodeSize);
+      // sub-blocks
+      let p=0;
+      while(p<lzwData.length){
+        const n = Math.min(255, lzwData.length - p);
+        push(n);
+        for(let i=0;i<n;i++) push(lzwData[p+i]);
+        p += n;
+      }
+      push(0x00); // block terminator
+    }
+
+    // Trailer
+    push(0x3B);
+    return new Uint8Array(out);
+
+    function lzwCompress(indexStream, minCodeSize){
+      // Standard GIF LZW
+      const clear = 1<<minCodeSize;
+      const end   = clear + 1;
+
+      let codeSize = minCodeSize + 1;
+      let dict = new Map();
+      const resetDict = () => {
+        dict = new Map();
+        for(let i=0;i<clear;i++) dict.set(String.fromCharCode(i), i);
+      };
+      resetDict();
+
+      let nextCode = end + 1;
+
+      const bytes = [];
+      let cur=0, bits=0;
+      const writeCode = (code) => {
+        cur |= (code << bits);
+        bits += codeSize;
+        while(bits >= 8){
+          bytes.push(cur & 255);
+          cur >>= 8;
+          bits -= 8;
+        }
+      };
+
+      writeCode(clear);
+
+      let w = String.fromCharCode(indexStream[0]);
+      for(let i=1;i<indexStream.length;i++){
+        const k = String.fromCharCode(indexStream[i]);
+        const wk = w + k;
+        if(dict.has(wk)){
+          w = wk;
+        }else{
+          writeCode(dict.get(w));
+          dict.set(wk, nextCode++);
+          w = k;
+
+          // grow code size
+          if(nextCode === (1<<codeSize) && codeSize < 12){
+            codeSize++;
+          }
+
+          // dictionary full: clear
+          if(nextCode >= 4096){
+            writeCode(clear);
+            resetDict();
+            codeSize = minCodeSize + 1;
+            nextCode = end + 1;
+          }
+        }
+      }
+      writeCode(dict.get(w));
+      writeCode(end);
+
+      // flush remaining bits
+      if(bits>0) bytes.push(cur & 255);
+      return bytes;
+    }
+  }
+
+  function captureProbabilityFrame(){
+    // Build grayscale indices from prob (R-B, G-0.5)
+    const sz=N*N;
+    const idx = new Uint8Array(sz);
+    let sum=0;
+    for(let i=0;i<sz;i++){
+      const re = (R[i]-B[i]);
+      const im = (G[i]-0.5);
+      sum += re*re + im*im;
+    }
+    const inv = sum>1e-9 ? (1/sum) : 1;
+    for(let i=0;i<sz;i++){
+      const re = (R[i]-B[i]);
+      const im = (G[i]-0.5);
+      const p = Math.min(1, (re*re+im*im)*inv*12);
+      idx[i] = (p*255)|0;
+    }
+    return idx;
+  }
+
+  $("btnExportGif").addEventListener("click", async () => {
+    // Capture ~3 seconds
+    const frames = [];
+    const fps = 20;
+    const total = 3*fps;
+    const delayCs = Math.round(100/fps);
+
+    const wasRunning = running;
+    stop();
+    statusEl.textContent = "Capturing frames for GIF…";
+
+    for(let f=0; f<total; f++){
+      stepOnce();
+      frames.push(captureProbabilityFrame());
+      await new Promise(r=>setTimeout(r, 0));
+    }
+
+    const bytes = gifEncode(frames, N, N, delayCs);
+    const blob = new Blob([bytes], {type:"image/gif"});
+    downloadBlob(blob, `baz-giflife-${Date.now()}.gif`);
+
+    statusEl.textContent = "GIF exported.";
+    if(wasRunning) start();
+  });
+
+  $("btnHelp").addEventListener("click", () => {
+    alert(
+      "What this is:\n\n" +
+      "• Pixel‑Life: RGB channels are treated like interacting species (reaction + diffusion + feedback).\n" +
+      "• Prime‑Wave: diffusion uses prime‑difference weights and snaps intensities into modular bands.\n" +
+      "• Bas‑Warp: a cheap anisotropic diffusion that mimics curved-coordinate effects (visual stand‑in).\n\n" +
+      "Try:\n" +
+      "1) Mode=Prime‑Wave, Np=8..16, bands=11..23.\n" +
+      "2) Seed (a few times), Start.\n" +
+      "3) Hit Measure to collapse into a spike.\n\n" +
+      "Export:\n" +
+      "• 'Export 3s GIF' saves a grayscale animation of the probability map."
+    );
+  });
+
+  // keyboard shortcuts
+  window.addEventListener("keydown", (e)=>{
+    if(e.key===" "){ e.preventDefault(); running?stop():start(); }
+    else if(e.key==="s"){ stepOnce(); }
+    else if(e.key==="r"){ alloc(); render(); }
+    else if(e.key==="m"){ if(modeSel.value!=="life"){ measurementCollapse(); render(); } }
+    else if(e.key==="g"){ $("btnExportGif").click(); }
+  });
+
+  // init
+  refreshLabels();
+  resizeCanvas();
+  alloc();
+  render();
+  statusEl.textContent = "Ready.";
+
+  // optional (won't work on file://): very small single-file SW via blob
+  try{
+    if(location.protocol !== "file:" && "serviceWorker" in navigator){
+      const swSrc = `
+        const CACHE = "baz-giflife-v1";
+        self.addEventListener("install", (e)=> {
+          e.waitUntil((async ()=>{
+            const cache = await caches.open(CACHE);
+            try{ await cache.add(self.registration.scope); }catch{}
+            self.skipWaiting();
+          })());
+        });
+        self.addEventListener("activate", (e)=> e.waitUntil(self.clients.claim()));
+        self.addEventListener("fetch", (e)=> {
+          e.respondWith((async ()=>{
+            const cache = await caches.open(CACHE);
+            const hit = await cache.match(e.request, {ignoreSearch:true});
+            if(hit) return hit;
+            try{
+              const resp = await fetch(e.request);
+              if(resp && resp.ok) cache.put(e.request, resp.clone());
+              return resp;
+            }catch{
+              return hit || new Response("Offline", {status:200});
+            }
+          })());
+        });
+      `;
+      const swBlob = new Blob([swSrc], {type:"text/javascript"});
+      const swUrl = URL.createObjectURL(swBlob);
+      navigator.serviceWorker.register(swUrl, {scope:"./"}).catch(()=>{});
+    }
+  }catch{}
+})();
+</script>
+</body>
+</html>
