@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="theme-color" content="#0b0b0b"/>
+<title>BAZ Signal Collector (Touch + Sensors)</title>
+<style>
+  :root{color-scheme:dark}
+  html,body{margin:0;height:100%;background:#070707;color:rgba(255,255,255,.92);
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+  *{box-sizing:border-box}
+  .wrap{max-width:1100px;margin:0 auto;padding:14px 12px 40px}
+  h1{margin:0 0 6px;font-size:18px;font-weight:950;letter-spacing:.2px}
+  p{margin:6px 0 0;opacity:.78;line-height:1.35}
+  .card{margin-top:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);
+    border-radius:18px;padding:12px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .grid{display:grid;grid-template-columns:1.05fr .95fr;gap:12px;align-items:start}
+  @media(max-width:980px){.grid{grid-template-columns:1fr}}
+  input,button,select,textarea{
+    appearance:none;border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.35);
+    color:rgba(255,255,255,.92);padding:10px 10px;border-radius:14px;font-weight:850;font-size:13px;outline:none;
+    -webkit-tap-highlight-color:transparent}
+  button{cursor:pointer}
+  button:active{transform:translateY(1px);background:rgba(255,255,255,.08)}
+  .pill{padding:7px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.10);
+    background:rgba(255,255,255,.05);font-size:12px;font-weight:900;opacity:.86;display:flex;gap:8px;align-items:center}
+  canvas{width:100%;height:auto;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:#000}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace}
+  #log{max-height:260px;overflow:auto;border-radius:14px;border:1px solid rgba(255,255,255,.10);
+    padding:10px;background:rgba(0,0,0,.30);font-size:12px;line-height:1.35}
+  #pad{
+    width:100%;height:280px;border-radius:16px;border:1px solid rgba(255,255,255,.12);
+    background: radial-gradient(circle at 25% 25%, rgba(255,255,255,.08), rgba(0,0,0,.55));
+    display:grid;place-items:center;user-select:none;touch-action:none;position:relative;overflow:hidden
+  }
+  .dot{position:absolute;width:18px;height:18px;border-radius:999px;background:rgba(157,255,176,.95);
+    box-shadow:0 0 18px rgba(157,255,176,.35);transform:translate(-50%,-50%)}
+  .small{font-size:12px;opacity:.78;line-height:1.35}
+  .warn{color:#ffd37a}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BAZ Signal Collector</h1>
+  <p>
+    This collects everything Chrome will give us: touch/pointer channels (x,y, pressure, size, tilt, etc)
+    plus optional motion/orientation sensors. Export as JSON/CSV.
+    <span class="warn">If a channel isn’t provided by your device/OS/browser, it will stay null.</span>
+  </p>
+
+  <div class="card grid">
+    <div>
+      <div class="row">
+        <button id="start">Start recording</button>
+        <button id="stop" disabled>Stop</button>
+        <button id="clear">Clear</button>
+        <button id="exportJson">Export JSON</button>
+        <button id="exportCsv">Export CSV (merged)</button>
+        <div class="pill">Status <span id="status">idle</span></div>
+        <div class="pill">Samples <span id="ns">0</span></div>
+      </div>
+
+      <div class="card" style="margin-top:10px">
+        <div class="row">
+          <div class="pill">Sample rate (Hz)</div>
+          <input id="fs" type="number" min="5" max="240" step="1" value="60" style="width:90px">
+          <div class="pill">Active pointer</div>
+          <select id="activeMode">
+            <option value="latest" selected>Latest pointer</option>
+            <option value="primary">Primary pointer</option>
+            <option value="mean">Mean of all pointers</option>
+          </select>
+          <div class="pill">Include sensors</div>
+          <select id="sensors">
+            <option value="off" selected>Off</option>
+            <option value="on">On (motion + orientation)</option>
+          </select>
+          <button id="perm">Request sensor permission</button>
+        </div>
+        <div class="small" style="margin-top:8px">
+          Recording is <b>uniform sampling</b> at the chosen Hz, using the latest known pointer state.
+          Pointer events are also captured as an event stream (kept in JSON export).
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:10px">
+        <div class="pill">Touch pad</div>
+        <div class="small" style="margin-top:8px">
+          Put one or more fingers on the pad. Keep steady if you want tiny jitter. Move if you want rich dynamics.
+        </div>
+        <div id="pad" style="margin-top:10px"></div>
+        <div class="small mono" id="read" style="margin-top:8px">—</div>
+      </div>
+
+      <div class="card" style="margin-top:10px">
+        <div class="pill">What we collect (pointer)</div>
+        <div class="small mono" style="margin-top:8px">
+t (s), pointerId, pointerType, isPrimary, x, y, dx, dy, vx, vy, speed,
+pressure, width, height, area, capProxy,
+tiltX, tiltY, twist, tangentialPressure, buttons, button
+        </div>
+        <div class="pill" style="margin-top:10px">What we collect (sensors, if available)</div>
+        <div class="small mono" style="margin-top:8px">
+devicemotion: acc(x,y,z), accG(x,y,z), rot(alpha,beta,gamma), interval
+deviceorientation: alpha,beta,gamma, absolute
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="row" style="justify-content:space-between">
+        <div class="pill">Live preview</div>
+        <div class="pill mono" id="live">—</div>
+      </div>
+      <canvas id="plot" width="720" height="360" style="margin-top:10px"></canvas>
+
+      <div class="card" style="margin-top:10px">
+        <div class="pill">Log</div>
+        <div id="log" class="mono" style="margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id)=>document.getElementById(id);
+  const pad = $("pad");
+  const plot = $("plot");
+  const ctx = plot.getContext("2d");
+
+  const statusEl = $("status"), nsEl = $("ns"), readEl = $("read"), liveEl = $("live");
+  const fsEl = $("fs"), sensorsEl = $("sensors"), activeModeEl = $("activeMode");
+
+  const logEl = $("log");
+  function log(msg){
+    const t=new Date().toLocaleTimeString();
+    const d=document.createElement("div");
+    d.textContent=`[${t}] ${msg}`;
+    logEl.appendChild(d);
+    logEl.scrollTop=logEl.scrollHeight;
+  }
+  function setStatus(s){ statusEl.textContent=s; }
+
+  // --------- pointer state ---------
+  // last known per pointerId
+  const pointers = new Map(); // id -> state
+  // state: {t, id, type, primary, x,y, dx,dy, vx,vy, speed, pressure,width,height,area,cap, tiltX,tiltY,twist,tangentialPressure,buttons,button}
+  const dots = new Map(); // id -> dot element for UI
+
+  let tStart = null;
+
+  function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+
+  function pressureFrom(e){
+    const p = (typeof e.pressure==="number" && e.pressure>0) ? e.pressure : null;
+    return p==null ? null : clamp(p,0,1);
+  }
+  function widthFrom(e){
+    const w = (typeof e.width==="number" && e.width>0) ? e.width : null;
+    return w;
+  }
+  function heightFrom(e){
+    const h = (typeof e.height==="number" && e.height>0) ? e.height : null;
+    return h;
+  }
+  function areaFrom(w,h){
+    if(w==null || h==null) return null;
+    return Math.PI*(w*0.5)*(h*0.5);
+  }
+  function capProxy(p, a){
+    if(p==null || a==null) return null;
+    return (p*a)/400.0;
+  }
+
+  function localXY(e){
+    const r = pad.getBoundingClientRect();
+    const x = clamp((e.clientX - r.left)/r.width, 0, 1);
+    const y = clamp((e.clientY - r.top)/r.height, 0, 1);
+    return {x,y};
+  }
+
+  function ensureDot(id){
+    if(dots.has(id)) return dots.get(id);
+    const d=document.createElement("div");
+    d.className="dot";
+    pad.appendChild(d);
+    dots.set(id,d);
+    return d;
+  }
+  function removeDot(id){
+    const d=dots.get(id);
+    if(d){ d.remove(); dots.delete(id); }
+  }
+
+  function updatePointer(e, kind){
+    if(tStart==null) tStart = performance.now()/1000;
+    const t = performance.now()/1000 - tStart;
+
+    const {x,y} = localXY(e);
+    const prev = pointers.get(e.pointerId);
+
+    const dx = prev ? (x - prev.x) : 0;
+    const dy = prev ? (y - prev.y) : 0;
+    const dt = prev ? Math.max(1e-6, t - prev.t) : 1/60;
+    const vx = dx/dt;
+    const vy = dy/dt;
+    const speed = Math.hypot(vx,vy);
+
+    const p = pressureFrom(e);
+    const w = widthFrom(e);
+    const h = heightFrom(e);
+    const a = areaFrom(w,h);
+    const cap = capProxy(p,a);
+
+    const st = {
+      t,
+      kind, // "down"/"move"/"up"/"cancel"
+      id: e.pointerId,
+      type: e.pointerType || null,
+      primary: !!e.isPrimary,
+      x,y, dx,dy, vx,vy, speed,
+      pressure: p,
+      width: w,
+      height: h,
+      area: a,
+      capProxy: cap,
+      tiltX: (typeof e.tiltX==="number") ? e.tiltX : null,
+      tiltY: (typeof e.tiltY==="number") ? e.tiltY : null,
+      twist: (typeof e.twist==="number") ? e.twist : null,
+      tangentialPressure: (typeof e.tangentialPressure==="number") ? e.tangentialPressure : null,
+      buttons: (typeof e.buttons==="number") ? e.buttons : null,
+      button: (typeof e.button==="number") ? e.button : null,
+      clientX: e.clientX,
+      clientY: e.clientY
+    };
+
+    pointers.set(e.pointerId, st);
+
+    // UI dot
+    const dot = ensureDot(e.pointerId);
+    const r = pad.getBoundingClientRect();
+    dot.style.left = (x*r.width) + "px";
+    dot.style.top  = (y*r.height) + "px";
+
+    return st;
+  }
+
+  pad.addEventListener("pointerdown",(e)=>{
+    pad.setPointerCapture(e.pointerId);
+    const st = updatePointer(e,"down");
+    eventStream.push(st);
+  });
+  pad.addEventListener("pointermove",(e)=>{
+    // accept hover if any device sends it (buttons=0), still useful
+    const st = updatePointer(e,"move");
+    eventStream.push(st);
+  });
+  pad.addEventListener("pointerup",(e)=>{
+    const st = updatePointer(e,"up");
+    eventStream.push(st);
+    pointers.delete(e.pointerId);
+    removeDot(e.pointerId);
+  });
+  pad.addEventListener("pointercancel",(e)=>{
+    const st = updatePointer(e,"cancel");
+    eventStream.push(st);
+    pointers.delete(e.pointerId);
+    removeDot(e.pointerId);
+  });
+
+  // --------- sensors ---------
+  let latestMotion = null; // {t, ax,ay,az, gx,gy,gz, ra,rb,rg, interval}
+  let latestOrient = null; // {t, alpha,beta,gamma, absolute}
+
+  function onMotion(e){
+    if(tStart==null) tStart = performance.now()/1000;
+    const t = performance.now()/1000 - tStart;
+    const acc = e.acceleration || {};
+    const accG = e.accelerationIncludingGravity || {};
+    const rot = e.rotationRate || {};
+    latestMotion = {
+      t,
+      ax: (typeof acc.x==="number") ? acc.x : null,
+      ay: (typeof acc.y==="number") ? acc.y : null,
+      az: (typeof acc.z==="number") ? acc.z : null,
+      gx: (typeof accG.x==="number") ? accG.x : null,
+      gy: (typeof accG.y==="number") ? accG.y : null,
+      gz: (typeof accG.z==="number") ? accG.z : null,
+      ra: (typeof rot.alpha==="number") ? rot.alpha : null,
+      rb: (typeof rot.beta==="number") ? rot.beta : null,
+      rg: (typeof rot.gamma==="number") ? rot.gamma : null,
+      interval: (typeof e.interval==="number") ? e.interval : null
+    };
+  }
+  function onOrient(e){
+    if(tStart==null) tStart = performance.now()/1000;
+    const t = performance.now()/1000 - tStart;
+    latestOrient = {
+      t,
+      alpha: (typeof e.alpha==="number") ? e.alpha : null,
+      beta: (typeof e.beta==="number") ? e.beta : null,
+      gamma: (typeof e.gamma==="number") ? e.gamma : null,
+      absolute: (typeof e.absolute==="boolean") ? e.absolute : null
+    };
+  }
+
+  async function requestSensorPerm(){
+    // iOS requires permission calls; Android typically doesn't.
+    try{
+      let ok=true;
+      if(typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function"){
+        const r = await DeviceMotionEvent.requestPermission();
+        ok = ok && (r === "granted");
+      }
+      if(typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function"){
+        const r = await DeviceOrientationEvent.requestPermission();
+        ok = ok && (r === "granted");
+      }
+      log(ok ? "Sensor permission granted (or not required)." : "Sensor permission denied.");
+    } catch(err){
+      log("Sensor permission error: " + (err?.message || err));
+    }
+  }
+  $("perm").onclick = requestSensorPerm;
+
+  function enableSensors(on){
+    if(on){
+      window.addEventListener("devicemotion", onMotion, {passive:true});
+      window.addEventListener("deviceorientation", onOrient, {passive:true});
+      log("Sensors enabled (if supported).");
+    } else {
+      window.removeEventListener("devicemotion", onMotion);
+      window.removeEventListener("deviceorientation", onOrient);
+      log("Sensors disabled.");
+    }
+  }
+
+  // --------- recording ---------
+  // event stream (high resolution) + sampled uniform series
+  const eventStream = []; // pointer event objects
+  const samples = [];     // uniform samples
+  let timer = null;
+  let running = false;
+
+  function choosePointerState(){
+    if(pointers.size===0) return null;
+    const mode = activeModeEl.value;
+    if(mode==="latest"){
+      let best=null;
+      for(const st of pointers.values()){
+        if(!best || st.t>best.t) best=st;
+      }
+      return best;
+    }
+    if(mode==="primary"){
+      for(const st of pointers.values()){
+        if(st.primary) return st;
+      }
+      // fallback
+      return pointers.values().next().value;
+    }
+    // mean of all pointers
+    let n=0;
+    const acc = {
+      t: null, id: -1, type:"mean", primary:false,
+      x:0,y:0, dx:0,dy:0, vx:0,vy:0, speed:0,
+      pressure:0, width:0, height:0, area:0, capProxy:0,
+      tiltX:0, tiltY:0, twist:0, tangentialPressure:0,
+      buttons:null, button:null
+    };
+    for(const st of pointers.values()){
+      n++;
+      acc.t = (acc.t==null) ? st.t : Math.max(acc.t, st.t);
+      acc.x += st.x; acc.y += st.y;
+      acc.dx += st.dx; acc.dy += st.dy;
+      acc.vx += st.vx; acc.vy += st.vy;
+      acc.speed += st.speed;
+      if(st.pressure!=null) acc.pressure += st.pressure;
+      if(st.width!=null) acc.width += st.width;
+      if(st.height!=null) acc.height += st.height;
+      if(st.area!=null) acc.area += st.area;
+      if(st.capProxy!=null) acc.capProxy += st.capProxy;
+      if(st.tiltX!=null) acc.tiltX += st.tiltX;
+      if(st.tiltY!=null) acc.tiltY += st.tiltY;
+      if(st.twist!=null) acc.twist += st.twist;
+      if(st.tangentialPressure!=null) acc.tangentialPressure += st.tangentialPressure;
+    }
+    const div = (v)=>v/n;
+    acc.x=div(acc.x); acc.y=div(acc.y);
+    acc.dx=div(acc.dx); acc.dy=div(acc.dy);
+    acc.vx=div(acc.vx); acc.vy=div(acc.vy);
+    acc.speed=div(acc.speed);
+    acc.pressure=div(acc.pressure);
+    acc.width=div(acc.width);
+    acc.height=div(acc.height);
+    acc.area=div(acc.area);
+    acc.capProxy=div(acc.capProxy);
+    acc.tiltX=div(acc.tiltX);
+    acc.tiltY=div(acc.tiltY);
+    acc.twist=div(acc.twist);
+    acc.tangentialPressure=div(acc.tangentialPressure);
+    return acc;
+  }
+
+  function start(){
+    if(running) return;
+    running=true;
+    samples.length=0;
+    eventStream.length=0;
+    tStart=null;
+    latestMotion=null;
+    latestOrient=null;
+
+    if(sensorsEl.value==="on") enableSensors(true);
+    else enableSensors(false);
+
+    const fs = clamp(parseInt(fsEl.value,10)||60, 5, 240);
+    const dt = 1000/fs;
+
+    timer = setInterval(()=>{
+      if(!running) return;
+      if(tStart==null) tStart = performance.now()/1000;
+      const t = performance.now()/1000 - tStart;
+
+      const st = choosePointerState();
+      const sm = {
+        t,
+        // pointer
+        px: st ? st.x : null,
+        py: st ? st.y : null,
+        pvx: st ? st.vx : null,
+        pvy: st ? st.vy : null,
+        pspeed: st ? st.speed : null,
+        ppressure: st ? st.pressure : null,
+        pwidth: st ? st.width : null,
+        pheight: st ? st.height : null,
+        parea: st ? st.area : null,
+        pcap: st ? st.capProxy : null,
+        ptiltX: st ? st.tiltX : null,
+        ptiltY: st ? st.tiltY : null,
+        ptwist: st ? st.twist : null,
+        ptangentialPressure: st ? st.tangentialPressure : null,
+        ptype: st ? st.type : null,
+        pid: st ? st.id : null,
+        pprimary: st ? st.primary : null,
+        // sensors
+        ax: latestMotion ? latestMotion.ax : null,
+        ay: latestMotion ? latestMotion.ay : null,
+        az: latestMotion ? latestMotion.az : null,
+        gx: latestMotion ? latestMotion.gx : null,
+        gy: latestMotion ? latestMotion.gy : null,
+        gz: latestMotion ? latestMotion.gz : null,
+        ra: latestMotion ? latestMotion.ra : null,
+        rb: latestMotion ? latestMotion.rb : null,
+        rg: latestMotion ? latestMotion.rg : null,
+        alpha: latestOrient ? latestOrient.alpha : null,
+        beta: latestOrient ? latestOrient.beta : null,
+        gamma: latestOrient ? latestOrient.gamma : null,
+        absolute: latestOrient ? latestOrient.absolute : null
+      };
+      samples.push(sm);
+      nsEl.textContent = String(samples.length);
+      updateLive(sm);
+      drawPreview();
+    }, dt);
+
+    $("start").disabled=true;
+    $("stop").disabled=false;
+    setStatus("recording");
+    log(`Recording started @ ${fs} Hz. Sensors=${sensorsEl.value}.`);
+  }
+
+  function stop(){
+    if(!running) return;
+    running=false;
+    if(timer){ clearInterval(timer); timer=null; }
+    enableSensors(false);
+    $("start").disabled=false;
+    $("stop").disabled=true;
+    setStatus("stopped");
+    log(`Recording stopped. samples=${samples.length}, pointerEvents=${eventStream.length}`);
+  }
+
+  $("start").onclick = start;
+  $("stop").onclick = stop;
+
+  $("clear").onclick = ()=>{
+    samples.length=0;
+    eventStream.length=0;
+    nsEl.textContent="0";
+    readEl.textContent="—";
+    liveEl.textContent="—";
+    ctx.fillStyle="#000"; ctx.fillRect(0,0,plot.width,plot.height);
+    log("Cleared buffers.");
+  };
+
+  // --------- exports ---------
+  function download(name, text, type){
+    const blob=new Blob([text], {type});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download=name;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+  }
+
+  $("exportJson").onclick = ()=>{
+    const payload = {
+      meta: {
+        created: new Date().toISOString(),
+        fs: parseInt(fsEl.value,10)||null,
+        sensors: sensorsEl.value,
+        activeMode: activeModeEl.value,
+        ua: navigator.userAgent
+      },
+      samples,
+      pointerEvents: eventStream
+    };
+    download("baz_signal_capture.json", JSON.stringify(payload, null, 2), "application/json");
+  };
+
+  $("exportCsv").onclick = ()=>{
+    // merged samples only
+    const cols = [
+      "t",
+      "px","py","pvx","pvy","pspeed","ppressure","pwidth","pheight","parea","pcap","ptiltX","ptiltY","ptwist","ptangentialPressure",
+      "ptype","pid","pprimary",
+      "ax","ay","az","gx","gy","gz","ra","rb","rg","alpha","beta","gamma","absolute"
+    ];
+    const lines = [cols.join(",")];
+    for(const s of samples){
+      const row = cols.map(c => {
+        const v = s[c];
+        if(v===null || v===undefined) return "";
+        if(typeof v==="string") return JSON.stringify(v);
+        return String(v);
+      });
+      lines.push(row.join(","));
+    }
+    download("baz_signal_capture_samples.csv", lines.join("\n"), "text/csv");
+  };
+
+  // --------- live UI ---------
+  function updateLive(sm){
+    // show a compact line
+    liveEl.textContent =
+      `t=${sm.t.toFixed(2)}  x=${fmt(sm.px)} y=${fmt(sm.py)}  cap=${fmt(sm.pcap)}  p=${fmt(sm.ppressure)}  speed=${fmt(sm.pspeed)}  ax=${fmt(sm.ax)} ay=${fmt(sm.ay)} az=${fmt(sm.az)}`;
+    readEl.textContent = JSON.stringify(sm, null, 2);
+  }
+  function fmt(v){
+    if(v==null || !isFinite(v)) return "—";
+    return (Math.abs(v) < 10 ? v.toFixed(3) : v.toFixed(2));
+  }
+
+  // --------- simple preview plot (cap + pressure + speed) ---------
+  function drawPreview(){
+    const W=plot.width, H=plot.height;
+    ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
+    const N=samples.length;
+    if(N<4) return;
+
+    const M = Math.min(800, N);
+    const start = N - M;
+
+    // extract series
+    const cap = new Float64Array(M);
+    const prs = new Float64Array(M);
+    const spd = new Float64Array(M);
+    for(let i=0;i<M;i++){
+      const s=samples[start+i];
+      cap[i] = (s.pcap==null)?NaN:s.pcap;
+      prs[i] = (s.ppressure==null)?NaN:s.ppressure;
+      spd[i] = (s.pspeed==null)?NaN:s.pspeed;
+    }
+
+    function bounds(arr){
+      let mn=Infinity,mx=-Infinity;
+      for(const v of arr){
+        if(!isFinite(v)) continue;
+        if(v<mn) mn=v;
+        if(v>mx) mx=v;
+      }
+      if(!isFinite(mn)||!isFinite(mx) || mn===mx){ mn=0; mx=1; }
+      return {mn,mx};
+    }
+    const bCap=bounds(cap), bPr=bounds(prs), bSp=bounds(spd);
+    const pad=18;
+
+    // grid line
+    ctx.strokeStyle="rgba(255,255,255,0.10)";
+    ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(pad,H/2); ctx.lineTo(W-pad,H/2); ctx.stroke();
+
+    function xmap(i){ return pad + i/(M-1)*(W-2*pad); }
+    function ymap(v, b){
+      if(!isFinite(v)) return NaN;
+      return (H-pad) - (v-b.mn)/(b.mx-b.mn)*(H-2*pad);
+    }
+
+    // cap (green)
+    ctx.strokeStyle="rgba(157,255,176,0.92)";
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    let started=false;
+    for(let i=0;i<M;i++){
+      const y=ymap(cap[i], bCap);
+      if(!isFinite(y)) continue;
+      const x=xmap(i);
+      if(!started){ ctx.moveTo(x,y); started=true; }
+      else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+
+    // pressure (orange)
+    ctx.strokeStyle="rgba(255,211,122,0.75)";
+    ctx.lineWidth=2;
+    ctx.beginPath(); started=false;
+    for(let i=0;i<M;i++){
+      const y=ymap(prs[i], bPr);
+      if(!isFinite(y)) continue;
+      const x=xmap(i);
+      if(!started){ ctx.moveTo(x,y); started=true; }
+      else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+
+    // speed (cyan-ish via white alpha; keep it simple)
+    ctx.strokeStyle="rgba(255,255,255,0.60)";
+    ctx.lineWidth=2;
+    ctx.beginPath(); started=false;
+    for(let i=0;i<M;i++){
+      const y=ymap(spd[i], bSp);
+      if(!isFinite(y)) continue;
+      const x=xmap(i);
+      if(!started){ ctx.moveTo(x,y); started=true; }
+      else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle="rgba(255,255,255,0.72)";
+    ctx.font="12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace";
+    ctx.fillText("cap(green)  pressure(orange)  speed(white)", pad, 14);
+  }
+
+  // init
+  setStatus("idle");
+  log("Ready. Hit Start recording, then touch the pad.");
+  ctx.fillStyle="#000"; ctx.fillRect(0,0,plot.width,plot.height);
+})();
+</script>
+</body>
+</html>

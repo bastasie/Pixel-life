@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="theme-color" content="#0b0b0b"/>
+<title>BAZ AQC Lab</title>
+<style>
+  :root{ color-scheme: dark; }
+  html,body{ margin:0; height:100%; background:#070707; color:rgba(255,255,255,0.92);
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; overflow:hidden; }
+  *{ box-sizing:border-box; }
+  #wrap{ position:fixed; inset:0; display:flex; flex-direction:column; gap:10px; padding:12px; }
+  .bar{ display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+    padding:10px 12px; border-radius:18px; border:1px solid rgba(255,255,255,0.12);
+    background: rgba(0,0,0,0.55); backdrop-filter: blur(10px); }
+  .title{ font-weight:950; letter-spacing:0.2px; }
+  select, button, input[type="range"], input[type="number"]{
+    appearance:none; border:1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.40);
+    color: rgba(255,255,255,0.92); padding: 10px 10px; border-radius: 16px;
+    font-weight: 850; font-size: 13px; outline:none; }
+  button{ cursor:pointer; }
+  button:active{ transform: translateY(1px); background: rgba(255,255,255,0.08); }
+  .pill{ padding:8px 10px; border-radius:999px; border:1px solid rgba(255,255,255,0.10);
+    background: rgba(255,255,255,0.05); font-size:12px; opacity:0.86; display:flex; gap:8px; align-items:center; }
+  #main{ flex:1; min-height:0; display:grid; grid-template-columns: 1fr 360px; gap:10px; }
+  #canvasCard{ border-radius:22px; border:1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.46);
+    backdrop-filter: blur(12px); padding:12px; display:flex; flex-direction:column; gap:10px; min-height:0; }
+  #cvWrap{ flex:1; min-height:0; border-radius:18px; border:1px solid rgba(255,255,255,0.10);
+    background: rgba(0,0,0,0.35); display:grid; place-items:center; overflow:hidden; }
+  canvas{ width: min(92vw, 980px); height:auto; image-rendering: pixelated; border-radius:16px; background:#000; touch-action:none; }
+  #side{ border-radius:22px; border:1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.46);
+    backdrop-filter: blur(12px); padding:12px; min-height:0; display:flex; flex-direction:column; gap:10px; overflow:hidden; }
+  #log{ flex:1; min-height:0; border-radius:16px; border:1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.30);
+    padding:10px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 12px; line-height:1.35; opacity:0.92; }
+  .grid{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+  .lab{ font-size:12px; opacity:0.78; }
+  @media (max-width: 980px){ #main{ grid-template-columns: 1fr; } canvas{ width: min(94vw, 720px); } }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="bar">
+    <div class="title">BAZ • GIF‑Life Kernel → Analogue Quantum Computing (browser emulator)</div>
+    <div class="pill"><span>Mode</span>
+      <select id="mode">
+        <option value="life">Life (binary)</option>
+        <option value="pixellife">Pixel‑Life (RGB reaction–diffusion)</option>
+        <option value="aqc" selected>BAZ‑AQC (complex field)</option>
+      </select>
+    </div>
+    <button id="btnRun">Run</button>
+    <button id="btnStep">Step</button>
+    <button id="btnClear">Clear</button>
+    <button id="btnSeed">Seed</button>
+    <div class="pill"><span>FPS</span><span id="fps">—</span></div>
+  </div>
+
+  <div id="main">
+    <div id="canvasCard">
+      <div class="lab">
+        Tap/drag to paint. Shift-tap = measure/sample. Shift double-tap = collapse (AQC).
+        Multi-touch creates EM-node “BAZ poles” using a capacitance proxy (pressure × contact area).
+      </div>
+      <div id="cvWrap"><canvas id="cv" width="256" height="144"></canvas></div>
+
+      <div class="bar" style="justify-content:space-between">
+        <div class="pill"><span>r₂</span><span id="r2v">1.00</span></div>
+        <input id="r2" type="range" min="0.25" max="6" step="0.01" value="1.00" style="flex:1; min-width: 220px;"/>
+
+        <div class="pill"><span>Prime‑kernel</span><span id="pkinfo">—</span></div>
+
+        <div class="pill"><span>Cap‑Poles</span>
+          <select id="capOn">
+            <option value="on" selected>ON</option>
+            <option value="off">OFF</option>
+          </select>
+        </div>
+
+        <div class="pill"><span>σ</span><span id="sigv">10</span></div>
+        <input id="sigma" type="range" min="3" max="40" step="1" value="10" style="flex:1; min-width: 140px;"/>
+
+        <div class="pill"><span>Gain</span><span id="gainv">1.00</span></div>
+        <input id="gain" type="range" min="0.10" max="6.00" step="0.05" value="1.00" style="flex:1; min-width: 140px;"/>
+      </div>
+    </div>
+
+    <div id="side">
+      <div class="bar">
+        <button id="btnPrimes">Generate primes</button>
+        <input id="primeN" type="number" min="8" max="256" step="1" value="64" style="width:110px"/>
+        <button id="btnBroadcast">Broadcast</button>
+        <button id="btnListen">Listen</button>
+      </div>
+
+      <div class="grid">
+        <div class="pill"><span>dt</span><input id="dt" type="number" value="0.08" step="0.01" min="0.001" max="1" style="width:110px"></div>
+        <div class="pill"><span>α</span><input id="alpha" type="number" value="0.35" step="0.01" min="0" max="2" style="width:110px"></div>
+        <div class="pill"><span>V</span><input id="Vk" type="number" value="0.80" step="0.01" min="-6" max="6" style="width:110px"></div>
+        <div class="pill"><span>γ</span><input id="gamma" type="number" value="0.18" step="0.01" min="0" max="2" style="width:110px"></div>
+      </div>
+
+      <div class="bar">
+        <button id="btnGateH">H</button>
+        <button id="btnGateX">X</button>
+        <button id="btnGateZ">Z</button>
+        <button id="btnKick">Phase‑kick</button>
+        <button id="btnNormalize">Normalize</button>
+      </div>
+
+      <div class="lab">
+        Note: raw capacitance is not exposed in web APIs. This uses a best-effort proxy from touch geometry/pressure.
+        Multi-tab D2D uses BroadcastChannel (same origin) to sync kernels + parameters.
+      </div>
+
+      <div id="log"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id)=>document.getElementById(id);
+  const cv = $("cv"), ctx = cv.getContext("2d", {alpha:false});
+  const W=cv.width, H=cv.height, N=W*H;
+
+  // ---------- State buffers ----------
+  let life = new Uint8Array(N), life2 = new Uint8Array(N);
+  let R = new Float32Array(N), G = new Float32Array(N), B = new Float32Array(N);
+  let R2 = new Float32Array(N), G2 = new Float32Array(N), B2 = new Float32Array(N);
+  let re = new Float32Array(N), im = new Float32Array(N);
+  let re2 = new Float32Array(N), im2 = new Float32Array(N);
+
+  // Prime kernel
+  let primes = [];
+  let w = []; // prime gaps
+  let wPhase = 0;
+
+  // D2D
+  let bc = null;
+
+  // ---------- UI ----------
+  const modeEl = $("mode");
+  const fpsEl = $("fps");
+  const r2El = $("r2"), r2v = $("r2v");
+  const pkinfo = $("pkinfo");
+  const logEl = $("log");
+  const dtEl = $("dt"), alphaEl = $("alpha"), VkEl = $("Vk"), gammaEl = $("gamma");
+  const primeNEl = $("primeN");
+
+  const capOnEl = $("capOn");
+  const sigmaEl = $("sigma"), sigv = $("sigv");
+  const gainEl = $("gain"), gainv = $("gainv");
+
+  function log(msg){
+    const t = new Date().toLocaleTimeString();
+    const d = document.createElement("div");
+    d.textContent = "[" + t + "] " + msg;
+    logEl.appendChild(d);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function clamp01(x){ return x<0?0:(x>1?1:x); }
+  function idx(x,y){ return (y*W+x); }
+  function wrapX(x){ return (x+W)%W; }
+  function wrapY(y){ return (y+H)%H; }
+
+  function basOfPixel(x,y){
+    const cx = (x - (W-1)/2);
+    const cy = (y - (H-1)/2);
+    const r1 = Math.hypot(cx, cy) / (Math.min(W,H)/2);
+    let phi = Math.atan2(cy, cx);
+    if (phi < 0) phi += Math.PI*2;
+    const r2 = parseFloat(r2El.value);
+    const th = r2 * phi;
+    return {r1, phi, th, r2};
+  }
+
+  function genPrimes(n){
+    const out = [];
+    let x = 2;
+    while(out.length < n){
+      let ok = true;
+      for (let p of out){
+        if (p*p > x) break;
+        if (x % p === 0){ ok=false; break; }
+      }
+      if (ok) out.push(x);
+      x++;
+    }
+    return out;
+  }
+
+  function buildPrimeKernel(n){
+    primes = genPrimes(n);
+    w = [];
+    for (let i=0;i<primes.length-1;i++) w.push(primes[i+1]-primes[i]);
+    if (!w.length) w=[1];
+    pkinfo.textContent = primes.length + " primes";
+    let mn = w[0], mx = w[0];
+    for (const a of w){ if (a<mn) mn=a; if (a>mx) mx=a; }
+    log("Prime kernel: n=" + primes.length + " gap range=[" + mn + "," + mx + "]");
+  }
+
+  function VofPhi(phi){
+    if (!w.length) return 0;
+    const m = Math.min(48, w.length);
+    let s = 0;
+    for (let k=0;k<m;k++){
+      const wk = w[k];
+      s += wk * Math.cos((k+1)*phi + wPhase);
+    }
+    return s / (m*6);
+  }
+
+  function lap4(arr, x, y){
+    const xm = wrapX(x-1), xp = wrapX(x+1);
+    const ym = wrapY(y-1), yp = wrapY(y+1);
+    const c = arr[idx(x,y)];
+    return (arr[idx(xm,y)] + arr[idx(xp,y)] + arr[idx(x,ym)] + arr[idx(x,yp)] - 4*c);
+  }
+
+  function stepLife(){
+    for (let y=0;y<H;y++){
+      for (let x=0;x<W;x++){
+        let n=0;
+        for (let oy=-1; oy<=1; oy++){
+          for (let ox=-1; ox<=1; ox++){
+            if (!ox && !oy) continue;
+            n += life[idx(wrapX(x+ox), wrapY(y+oy))];
+          }
+        }
+        const i = idx(x,y);
+        const a = life[i];
+        life2[i] = (a ? (n===2 || n===3) : (n===3)) ? 1 : 0;
+      }
+    }
+    const t=life; life=life2; life2=t;
+  }
+
+  function stepPixelLife(){
+    const gamma = parseFloat(gammaEl.value);
+    const dt = parseFloat(dtEl.value);
+    const k1=1.0, k2=1.2, k3=0.9;
+    for (let y=0;y<H;y++){
+      for (let x=0;x<W;x++){
+        const i = idx(x,y);
+        const r=R[i], g=G[i], b=B[i];
+        const dR = (-k1*r + k3*b);
+        const dG = ( k1*r - k2*g);
+        const dB = ( k2*g - k3*b);
+        const lR = lap4(R,x,y), lG = lap4(G,x,y), lB = lap4(B,x,y);
+        R2[i] = clamp01(r + dt*(dR + gamma*lR));
+        G2[i] = clamp01(g + dt*(dG + gamma*lG));
+        B2[i] = clamp01(b + dt*(dB + gamma*lB));
+      }
+    }
+    let t=R; R=R2; R2=t; t=G; G=G2; G2=t; t=B; B=B2; B2=t;
+  }
+
+  // ----- Capacitance poles (proxy) -----
+  function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+  const pointers = new Map(); // id -> {x,y,pressure,area}
+  const lastTapById = new Map();
+
+  function getLocalXY(e){
+    const rect=cv.getBoundingClientRect();
+    const x = Math.floor((e.clientX-rect.left)/rect.width*W);
+    const y = Math.floor((e.clientY-rect.top)/rect.height*H);
+    return {x: clamp(x,0,W-1), y: clamp(y,0,H-1)};
+  }
+
+  function estimateAreaFromEvent(e){
+    const w = (typeof e.width === "number" && e.width>0) ? e.width : 12;
+    const h = (typeof e.height === "number" && e.height>0) ? e.height : 12;
+    return Math.PI * (w*0.5) * (h*0.5);
+  }
+
+  function estimatePressure(e){
+    const p = (typeof e.pressure === "number" && e.pressure>0) ? e.pressure : 0.5;
+    return clamp(p, 0.05, 1.0);
+  }
+
+  function getPoles(){
+    if (capOnEl.value !== "on") return [];
+    const gain = parseFloat(gainEl.value);
+    const poles = [];
+    for (const [id,p] of pointers.entries()){
+      const Cproxy = p.pressure * p.area;
+      const s = gain * (Cproxy / 400.0);
+      const sign = (id % 2 === 0) ? -1 : +1;
+      poles.push({x:p.x, y:p.y, s: s*sign});
+    }
+    return poles;
+  }
+
+  function polePotentialAt(x,y){
+    const poles = getPoles();
+    if (!poles.length) return 0;
+    const sig = parseFloat(sigmaEl.value);
+    const inv2s2 = 1.0 / (2.0*sig*sig);
+    let Vp = 0;
+    for (const pl of poles){
+      const dx = x - pl.x, dy = y - pl.y;
+      Vp += pl.s * Math.exp(-(dx*dx+dy*dy) * inv2s2);
+    }
+    return Vp;
+  }
+
+  function stepAQC(){
+    const alpha = parseFloat(alphaEl.value);
+    const dt = parseFloat(dtEl.value);
+    for (let y=0;y<H;y++){
+      for (let x=0;x<W;x++){
+        const i = idx(x,y);
+        const phi = basOfPixel(x,y).phi;
+        const lapRe = lap4(re,x,y);
+        const lapIm = lap4(im,x,y);
+        const V = VofPhi(phi) + polePotentialAt(x,y);
+
+        const dRe = (-alpha*lapIm) + (V*im[i]);
+        const dIm = ( alpha*lapRe) - (V*re[i]);
+
+        re2[i] = re[i] + dt*dRe;
+        im2[i] = im[i] + dt*dIm;
+      }
+    }
+    let t=re; re=re2; re2=t; t=im; im=im2; im2=t;
+    wPhase += 0.02;
+  }
+
+  function normalizeAQC(){
+    let s = 0;
+    for (let i=0;i<N;i++) s += re[i]*re[i] + im[i]*im[i];
+    if (s <= 1e-12) return;
+    const inv = 1/Math.sqrt(s);
+    for (let i=0;i<N;i++){ re[i]*=inv; im[i]*=inv; }
+  }
+
+  function applyGate(kind){
+    for (let y=0;y<H;y++){
+      for (let x=0;x<W;x++){
+        const i = idx(x,y);
+        const is1 = x >= (W>>1);
+        const a0r = is1 ? 0 : re[i], a0i = is1 ? 0 : im[i];
+        const a1r = is1 ? re[i] : 0, a1i = is1 ? im[i] : 0;
+
+        let b0r=a0r, b0i=a0i, b1r=a1r, b1i=a1i;
+        if (kind==="X"){
+          b0r=a1r; b0i=a1i; b1r=a0r; b1i=a0i;
+        } else if (kind==="Z"){
+          b1r=-a1r; b1i=-a1i;
+        } else if (kind==="H"){
+          const s = Math.SQRT1_2;
+          b0r = (a0r + a1r)*s; b0i = (a0i + a1i)*s;
+          b1r = (a0r - a1r)*s; b1i = (a0i - a1i)*s;
+        }
+        if (!is1){ re[i]=b0r; im[i]=b0i; } else { re[i]=b1r; im[i]=b1i; }
+      }
+    }
+    normalizeAQC();
+    log("Gate " + kind + " applied.");
+  }
+
+  function phaseKick(){
+    const Vk = parseFloat(VkEl.value);
+    for (let y=0;y<H;y++){
+      for (let x=0;x<W;x++){
+        const i = idx(x,y);
+        const phi = basOfPixel(x,y).phi;
+        const V = VofPhi(phi) + polePotentialAt(x,y);
+        const th = -Vk * V;
+        const c = Math.cos(th), s = Math.sin(th);
+        const ar = re[i], ai = im[i];
+        re[i] = ar*c - ai*s;
+        im[i] = ar*s + ai*c;
+      }
+    }
+    normalizeAQC();
+    log("Phase kick Vk=" + Vk.toFixed(2));
+  }
+
+  // ---------- Rendering ----------
+  const img = ctx.createImageData(W,H);
+  const data = img.data;
+
+  function draw(){
+    const mode = modeEl.value;
+    if (mode === "life"){
+      for (let i=0;i<N;i++){
+        const v = life[i] ? 255 : 0;
+        data[i*4+0]=v; data[i*4+1]=v; data[i*4+2]=v; data[i*4+3]=255;
+      }
+    } else if (mode === "pixellife"){
+      for (let i=0;i<N;i++){
+        data[i*4+0]=(R[i]*255)|0;
+        data[i*4+1]=(G[i]*255)|0;
+        data[i*4+2]=(B[i]*255)|0;
+        data[i*4+3]=255;
+      }
+    } else {
+      for (let y=0;y<H;y++){
+        for (let x=0;x<W;x++){
+          const i = idx(x,y);
+          const ar=re[i], ai=im[i];
+          const mag = Math.min(1, Math.sqrt(ar*ar+ai*ai)*3.0);
+          const ph = Math.atan2(ai, ar);
+          const hue = (ph + Math.PI) / (2*Math.PI);
+          const s=0.95, v=mag;
+          const h6 = hue*6;
+          const c=v*s;
+          const xcol=c*(1-Math.abs(h6%2-1));
+          let rr=0,gg=0,bb=0;
+          if (h6<1){ rr=c; gg=xcol; bb=0; }
+          else if (h6<2){ rr=xcol; gg=c; bb=0; }
+          else if (h6<3){ rr=0; gg=c; bb=xcol; }
+          else if (h6<4){ rr=0; gg=xcol; bb=c; }
+          else if (h6<5){ rr=xcol; gg=0; bb=c; }
+          else { rr=c; gg=0; bb=xcol; }
+          const m=v-c;
+          data[i*4+0]=((rr+m)*255)|0;
+          data[i*4+1]=((gg+m)*255)|0;
+          data[i*4+2]=((bb+m)*255)|0;
+          data[i*4+3]=255;
+        }
+      }
+    }
+    ctx.putImageData(img,0,0);
+    r2v.textContent = parseFloat(r2El.value).toFixed(2);
+    sigv.textContent = String(parseInt(sigmaEl.value,10));
+    gainv.textContent = parseFloat(gainEl.value).toFixed(2);
+  }
+
+  // ---------- Controls ----------
+  let running=false;
+  $("btnRun").onclick = () => { running=!running; $("btnRun").textContent = running?"Pause":"Run"; };
+  $("btnStep").onclick = () => { tick(); draw(); };
+  $("btnClear").onclick = () => { clearAll(); draw(); };
+  $("btnSeed").onclick = () => { seed(); draw(); };
+
+  $("btnPrimes").onclick = () => buildPrimeKernel(Math.max(8, Math.min(256, parseInt(primeNEl.value||"64",10))));
+  $("btnBroadcast").onclick = () => broadcast();
+  $("btnListen").onclick = () => listen();
+
+  $("btnGateH").onclick = () => { if(modeEl.value==="aqc") applyGate("H"); draw(); };
+  $("btnGateX").onclick = () => { if(modeEl.value==="aqc") applyGate("X"); draw(); };
+  $("btnGateZ").onclick = () => { if(modeEl.value==="aqc") applyGate("Z"); draw(); };
+  $("btnKick").onclick  = () => { if(modeEl.value==="aqc") phaseKick(); draw(); };
+  $("btnNormalize").onclick = () => { if(modeEl.value==="aqc") { normalizeAQC(); log("Normalized."); draw(); } };
+
+  function clearAll(){
+    life.fill(0);
+    R.fill(0); G.fill(0); B.fill(0);
+    re.fill(0); im.fill(0);
+  }
+
+  function seed(){
+    const mode=modeEl.value;
+    if (mode==="life"){
+      for (let i=0;i<N;i++) life[i] = (Math.random()<0.16)?1:0;
+      log("Seeded Life.");
+    } else if (mode==="pixellife"){
+      for (let i=0;i<N;i++){
+        R[i]=Math.random()*0.25; G[i]=Math.random()*0.25; B[i]=Math.random()*0.25;
+        if (Math.random()<0.02){ R[i]=1; G[i]=0; B[i]=0; }
+      }
+      log("Seeded Pixel-Life.");
+    } else {
+      const cx=W*0.35, cy=H*0.55;
+      for (let y=0;y<H;y++){
+        for (let x=0;x<W;x++){
+          const i=idx(x,y);
+          const dx=x-cx, dy=y-cy;
+          const g=Math.exp(-(dx*dx+dy*dy)/(2*180));
+          re[i]=g; im[i]=0;
+        }
+      }
+      normalizeAQC();
+      log("Seeded AQC field.");
+    }
+  }
+
+  function tick(){
+    const mode = modeEl.value;
+    if (mode==="life") stepLife();
+    else if (mode==="pixellife") stepPixelLife();
+    else stepAQC();
+  }
+
+  // pointer interaction
+  cv.addEventListener("pointerdown",(e)=>{
+    cv.setPointerCapture(e.pointerId);
+    const {x,y} = getLocalXY(e);
+    pointers.set(e.pointerId, {x,y, area: estimateAreaFromEvent(e), pressure: estimatePressure(e)});
+    const now = performance.now();
+    const last = lastTapById.get(e.pointerId) || 0;
+    const dbl = (now - last) < 320;
+    lastTapById.set(e.pointerId, now);
+
+    const mode=modeEl.value;
+    const measure = e.shiftKey;
+
+    if (mode==="life"){
+      if (measure){
+        let n=0;
+        for (let oy=-1; oy<=1; oy++){
+          for (let ox=-1; ox<=1; ox++){
+            if (!ox && !oy) continue;
+            n += life[idx(wrapX(x+ox), wrapY(y+oy))];
+          }
+        }
+        log("Sample Life @(" + x + "," + y + "): alive=" + life[idx(x,y)] + " n=" + n);
+      } else {
+        life[idx(x,y)] = 1;
+      }
+      return;
+    }
+
+    if (mode==="pixellife"){
+      if (measure){
+        const i=idx(x,y);
+        log("Sample RGB @(" + x + "," + y + "): R=" + R[i].toFixed(2) + " G=" + G[i].toFixed(2) + " B=" + B[i].toFixed(2));
+      } else {
+        const i=idx(x,y);
+        R[i]=1; G[i]=0.15; B[i]=0.05;
+      }
+      return;
+    }
+
+    // AQC
+    const i=idx(x,y);
+    if (measure){
+      const p = re[i]*re[i] + im[i]*im[i];
+      const bp = basOfPixel(x,y);
+      const Vp = polePotentialAt(x,y);
+      log("Measure ψ @(" + x + "," + y + ") p≈" + p.toFixed(4) + " r1≈" + bp.r1.toFixed(2) + " φ≈" + bp.phi.toFixed(2) + " Vpole≈" + Vp.toFixed(3));
+      if (dbl){
+        const rad = 10;
+        for (let yy=0; yy<H; yy++){
+          for (let xx=0; xx<W; xx++){
+            const ii=idx(xx,yy);
+            const dx=xx-x, dy=yy-y;
+            if (dx*dx+dy*dy > rad*rad){ re[ii]=0; im[ii]=0; }
+          }
+        }
+        normalizeAQC();
+        log("Collapse: kept small disk; renormalized.");
+      }
+      draw();
+      return;
+    } else {
+      const base = VofPhi(basOfPixel(x,y).phi);
+      const Vp = polePotentialAt(x,y);
+      const th = (base + Vp) * 3.0;
+      re[i] += Math.cos(th)*0.8;
+      im[i] += Math.sin(th)*0.8;
+      normalizeAQC();
+    }
+  });
+
+  cv.addEventListener("pointermove",(e)=>{
+    if (!pointers.has(e.pointerId)) return;
+    const {x,y} = getLocalXY(e);
+    pointers.set(e.pointerId, {x,y, area: estimateAreaFromEvent(e), pressure: estimatePressure(e)});
+    if (!e.buttons) return;
+
+    const mode=modeEl.value;
+    if (mode==="life"){ life[idx(x,y)] = 1; return; }
+    if (mode==="pixellife"){ const i=idx(x,y); R[i]=1; G[i]=0.15; B[i]=0.05; return; }
+    if (mode==="aqc" && !e.shiftKey){
+      const i=idx(x,y);
+      const base = VofPhi(basOfPixel(x,y).phi);
+      const Vp = polePotentialAt(x,y);
+      const th = (base + Vp) * 3.0;
+      re[i] += Math.cos(th)*0.15;
+      im[i] += Math.sin(th)*0.15;
+    }
+  });
+
+  function clearPtr(e){ pointers.delete(e.pointerId); }
+  cv.addEventListener("pointerup", clearPtr);
+  cv.addEventListener("pointercancel", clearPtr);
+
+  // ---------- D2D ----------
+  function listen(){
+    if (bc) { log("Already listening."); return; }
+    bc = new BroadcastChannel("baz_aqc_d2d");
+    bc.onmessage = (ev)=>{
+      try{
+        const msg = ev.data || {};
+        if (msg.type==="prime_kernel" && Array.isArray(msg.primes) && Array.isArray(msg.w)){
+          primes = msg.primes.slice();
+          w = msg.w.slice();
+          wPhase = msg.wPhase || 0;
+          pkinfo.textContent = primes.length + " primes (rx)";
+          log("Received prime kernel. primes=" + primes.length);
+        }
+        if (msg.type==="params"){
+          if (typeof msg.r2 === "number") r2El.value = String(msg.r2);
+          if (typeof msg.dt === "number") dtEl.value = String(msg.dt);
+          if (typeof msg.alpha === "number") alphaEl.value = String(msg.alpha);
+          if (typeof msg.gamma === "number") gammaEl.value = String(msg.gamma);
+          if (typeof msg.Vk === "number") VkEl.value = String(msg.Vk);
+          if (typeof msg.sigma === "number") sigmaEl.value = String(msg.sigma);
+          if (typeof msg.gain === "number") gainEl.value = String(msg.gain);
+          if (typeof msg.capOn === "string") capOnEl.value = msg.capOn;
+          log("Received params.");
+        }
+      }catch(e){ log("BC error: " + (e?.message||e)); }
+    };
+    log("Listening on baz_aqc_d2d (same-origin tabs).");
+  }
+
+  function broadcast(){
+    if (!bc) bc = new BroadcastChannel("baz_aqc_d2d");
+    bc.postMessage({ type:"prime_kernel", primes, w, wPhase });
+    bc.postMessage({
+      type:"params",
+      r2: parseFloat(r2El.value),
+      dt: parseFloat(dtEl.value),
+      alpha: parseFloat(alphaEl.value),
+      gamma: parseFloat(gammaEl.value),
+      Vk: parseFloat(VkEl.value),
+      sigma: parseFloat(sigmaEl.value),
+      gain: parseFloat(gainEl.value),
+      capOn: capOnEl.value
+    });
+    log("Broadcast sent.");
+  }
+
+  // ---------- Main loop ----------
+  let frames=0, lastF=performance.now();
+  function loop(){
+    const now = performance.now();
+    if (running) tick();
+    draw();
+    frames++;
+    if (now-lastF>500){
+      const fps = frames*1000/(now-lastF);
+      fpsEl.textContent = fps.toFixed(1);
+      frames=0; lastF=now;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function uiSync(){
+    r2v.textContent = parseFloat(r2El.value).toFixed(2);
+    sigv.textContent = String(parseInt(sigmaEl.value,10));
+    gainv.textContent = parseFloat(gainEl.value).toFixed(2);
+  }
+  r2El.addEventListener("input", uiSync);
+  sigmaEl.addEventListener("input", uiSync);
+  gainEl.addEventListener("input", uiSync);
+  uiSync();
+
+  buildPrimeKernel(parseInt(primeNEl.value,10));
+  seed();
+  draw();
+  loop();
+})();
+</script>
+</body>
+</html>
