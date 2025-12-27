@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <meta name="theme-color" content="#0b0f14" />
+  <title>BasUni Prime Index Lab (k → pₖ)</title>
+  <style>
+    :root{--bg:#0b0f14;--panel:#111826;--muted:#9fb0c3;--text:#e9f2ff;--accent:#6ae4ff;--ok:#4dff88;--warn:#ffdf6a;--bad:#ff6a6a;}
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;background:var(--bg);color:var(--text);}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px;}
+    h1{margin:8px 0 4px;font-size:20px;font-weight:750;letter-spacing:.2px}
+    .sub{color:var(--muted);margin:0 0 14px;font-size:13px;line-height:1.35}
+    .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:12px}
+    @media (max-width: 900px){.grid{grid-template-columns:1fr}}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:14px;box-shadow:0 14px 40px rgba(0,0,0,.35)}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    label{font-size:12px;color:var(--muted)}
+    input,button,select,textarea{
+      border-radius:12px;border:1px solid rgba(255,255,255,.12);
+      background:rgba(0,0,0,.25);color:var(--text);padding:10px 12px;font-size:14px;
+      outline:none;
+    }
+    input::placeholder,textarea::placeholder{color:rgba(159,176,195,.65)}
+    button{cursor:pointer;background:rgba(106,228,255,.10);border-color:rgba(106,228,255,.35)}
+    button:hover{background:rgba(106,228,255,.14)}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    .pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:6px 10px;font-size:12px;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.18);color:var(--muted)}
+    .pill b{color:var(--text);font-weight:700}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+    .hr{height:1px;background:rgba(255,255,255,.08);margin:12px 0}
+    .small{font-size:12px;color:var(--muted);line-height:1.45}
+    .kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    @media (max-width: 540px){.kpi{grid-template-columns:1fr}}
+    .kpi .box{border-radius:14px;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.18);padding:10px}
+    .kpi .t{font-size:12px;color:var(--muted);margin:0 0 4px}
+    .kpi .v{font-size:16px;font-weight:780;margin:0}
+    .log{height:220px;overflow:auto;border-radius:14px;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.16);padding:10px;font-size:12px;color:#cfe0ff}
+    .log .dim{color:rgba(233,242,255,.6)}
+    canvas{width:100%;height:auto;border-radius:14px;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.18)}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    @media (max-width: 900px){.two{grid-template-columns:1fr}}
+    .hint{color:var(--muted);font-size:12px;margin-top:6px}
+    .footer{margin-top:14px;color:rgba(159,176,195,.75);font-size:12px}
+    .footer a{color:var(--accent);text-decoration:none}
+    .footer a:hover{text-decoration:underline}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BasUni Prime Index Lab</h1>
+  <p class="sub">
+    Exact <span class="mono">k → pₖ</span> prime lookup using a “prime‑vector” encoding view (PPU-style) and a BasUni spectral readout <span class="mono">λₖ = 1 / pₖ^{α·s}</span>.
+    This is a pure software implementation, but the UI is structured like a pole‑grid / eigenmode lab.
+  </p>
+
+  <div class="grid">
+    <div class="card">
+      <div class="row">
+        <div>
+          <label for="k">Prime index k</label><br/>
+          <input id="k" type="number" min="1" step="1" value="10000" />
+        </div>
+        <div>
+          <label for="mode">Engine</label><br/>
+          <select id="mode">
+            <option value="autosieve">Auto Sieve (doubling upper bound)</option>
+            <option value="segmented">Segmented Sieve (streaming)</option>
+          </select>
+        </div>
+        <div>
+          <label>&nbsp;</label><br/>
+          <button id="run">Compute pₖ</button>
+        </div>
+        <div>
+          <label>&nbsp;</label><br/>
+          <button id="stop" disabled>Stop</button>
+        </div>
+        <span class="pill"><b>Status</b> <span id="status">idle</span></span>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="kpi">
+        <div class="box">
+          <p class="t">pₖ (k-th prime)</p>
+          <p class="v mono" id="pk">—</p>
+        </div>
+        <div class="box">
+          <p class="t">Time</p>
+          <p class="v mono" id="time">—</p>
+        </div>
+        <div class="box">
+          <p class="t">Work</p>
+          <p class="v mono" id="work">—</p>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="two">
+        <div>
+          <label>PPU-style prime-vector encoding (factor exponents)</label>
+          <div class="hint">Try: encode Q = pₖ, or enter any integer below.</div>
+          <div class="row" style="margin-top:8px">
+            <input id="Q" type="number" min="1" step="1" placeholder="Enter integer Q (e.g., 9973)" style="flex:1" />
+            <button id="encode">Encode</button>
+          </div>
+          <div class="log mono" id="encOut" aria-label="prime-vector output"></div>
+        </div>
+        <div>
+          <label>BasUni spectral readout</label>
+          <div class="hint">BasUni papers express prime-number eigenvalues via pₖ; here we compute the derived value from the exact pₖ.</div>
+          <div class="row" style="margin-top:8px">
+            <div>
+              <label for="alpha">α</label><br/>
+              <input id="alpha" type="number" value="1" step="1" min="1" />
+            </div>
+            <div>
+              <label for="sreal">s (real)</label><br/>
+              <input id="sreal" type="number" value="1" step="0.1" />
+            </div>
+            <div>
+              <label>&nbsp;</label><br/>
+              <button id="evalLam">Compute λ</button>
+            </div>
+          </div>
+          <div class="log mono" id="specOut" aria-label="spectral output"></div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+      <label>Pole-grid / residue “fingerprint” (first few primes)</label>
+      <div class="hint">For each base prime p, we show residues of pₖ mod p across columns. Primes “miss” the zero residue except at p itself.</div>
+      <canvas id="gridCanvas" width="900" height="260"></canvas>
+
+      <div class="hr"></div>
+      <label>Engine log</label>
+      <div class="log mono" id="log"></div>
+
+      <div class="footer">
+        Built as a single-file PWA-friendly lab. Tip: “Add to Home Screen” in Chrome.
+      </div>
+    </div>
+
+    <div class="card">
+      <h1 style="font-size:16px;margin-top:0">What changed vs a generic prime finder</h1>
+      <p class="small">
+        <b>1) Prime-vector as the internal “bus”.</b> Instead of treating numbers as opaque integers,
+        we expose the factor-exponent vector <span class="mono">(r₁,…,rₙ)</span> where <span class="mono">Q = ∏ pᵢ^{rᵢ}</span>,
+        mirroring the PPU paper’s “prime-encoder” loop.
+      </p>
+      <p class="small">
+        <b>2) BasUni eigenvalue readout.</b> Your BasUni eigenmode formalism associates prime-number structure with eigenvalues
+        written in terms of the k-th prime <span class="mono">pₖ</span>. Once <span class="mono">pₖ</span> is computed exactly,
+        the app reports <span class="mono">λₖ</span> under user-selected parameters.
+      </p>
+      <p class="small">
+        <b>3) Pole-grid visualization.</b> The “residue fingerprint” is a direct, deterministic projection of <span class="mono">pₖ</span> through small primes,
+        which is the software analog of routing a signal through a bank of modular “poles”.
+      </p>
+
+      <div class="hr"></div>
+
+      <h1 style="font-size:16px;margin-top:0">Limits / reality check</h1>
+      <p class="small">
+        Browsers don’t expose raw touchscreen capacitance or antenna voltages to web apps.
+        So this file sticks to the exact math/logic pathways and uses visuals to mirror your pole-grid concept.
+      </p>
+
+      <div class="hr"></div>
+
+      <h1 style="font-size:16px;margin-top:0">Quick tests</h1>
+      <div class="small mono" id="tests"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id)=>document.getElementById(id);
+  const logEl = $("log");
+  const statusEl = $("status");
+  const pkEl = $("pk");
+  const timeEl = $("time");
+  const workEl = $("work");
+  const encOut = $("encOut");
+  const specOut = $("specOut");
+  const canvas = $("gridCanvas");
+  const ctx = canvas.getContext("2d", { alpha: false });
+
+  let STOP = false;
+
+  function now(){ return performance.now(); }
+  function setStatus(s){ statusEl.textContent = s; }
+  function log(msg, dim=false){
+    const div = document.createElement("div");
+    if(dim) div.className = "dim";
+    div.textContent = msg;
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function clearLog(){ logEl.textContent = ""; }
+
+  function fmtMs(ms){
+    if(!isFinite(ms)) return "—";
+    if(ms < 1000) return ms.toFixed(1)+" ms";
+    return (ms/1000).toFixed(3)+" s";
+  }
+
+  // --------- Sieve engines (exact) ---------
+
+  function simpleSieve(limit){
+    const isPrime = new Uint8Array(limit + 1);
+    isPrime.fill(1, 2);
+    const r = Math.floor(Math.sqrt(limit));
+    for(let p=2; p<=r; p++){
+      if(isPrime[p]){
+        for(let m=p*p; m<=limit; m+=p) isPrime[m]=0;
+      }
+    }
+    const primes = [];
+    for(let i=2;i<=limit;i++) if(isPrime[i]) primes.push(i);
+    return primes;
+  }
+
+  // streaming segmented sieve: builds primes up to limit without holding full bitset
+  function segmentedSieve(limit, chunkSize=1<<20){
+    const r = Math.floor(Math.sqrt(limit));
+    const basePrimes = simpleSieve(r);
+    const primes = basePrimes.slice();
+    let low = r+1;
+    while(low <= limit){
+      if(STOP) return {primes, stopped:true, limitDone: low-1};
+      const high = Math.min(limit, low + chunkSize - 1);
+      const size = high - low + 1;
+      const mark = new Uint8Array(size);
+      // 0 means prime (unmarked), 1 means composite
+      for(const p of basePrimes){
+        const start = Math.max(p*p, Math.ceil(low/p)*p);
+        for(let m=start; m<=high; m+=p){
+          mark[m-low] = 1;
+        }
+      }
+      for(let i=0;i<size;i++){
+        if(mark[i]===0){
+          primes.push(low + i);
+        }
+      }
+      low = high + 1;
+    }
+    return {primes, stopped:false, limitDone: limit};
+  }
+
+  async function kthPrimeAutoSieve(k){
+    // Exact, grows the search bound until it contains at least k primes.
+    // Correctness comes from the monotonic doubling loop.
+    let limit = 1024;
+    if(k > 1000) limit = 1<<20;
+
+    let rounds = 0;
+    while(true){
+      if(STOP) throw new Error("stopped");
+      rounds++;
+      log(`sieve round ${rounds}: limit = ${limit.toLocaleString()}`);
+      const t0 = now();
+      const primes = simpleSieve(limit);
+      const dt = now()-t0;
+      log(`  found π(${limit.toLocaleString()}) = ${primes.length.toLocaleString()} primes in ${fmtMs(dt)}`, true);
+      if(primes.length >= k){
+        return {pk: primes[k-1], primes, limit, rounds, engine:"autosieve"};
+      }
+      limit *= 2;
+      if(limit > 2_147_483_000) throw new Error("limit too large for this browser tab");
+      await new Promise(r => setTimeout(r, 0)); // yield
+    }
+  }
+
+  async function kthPrimeSegmented(k){
+    let limit = 1<<20;
+    if(k <= 10000) limit = 1<<18;
+    let rounds = 0;
+    while(true){
+      if(STOP) throw new Error("stopped");
+      rounds++;
+      log(`segmented round ${rounds}: limit = ${limit.toLocaleString()}`);
+      const t0 = now();
+      const out = segmentedSieve(limit, 1<<19);
+      const dt = now()-t0;
+      log(`  built primes up to ${out.limitDone.toLocaleString()} in ${fmtMs(dt)} (count=${out.primes.length.toLocaleString()})`, true);
+      if(out.primes.length >= k){
+        return {pk: out.primes[k-1], primes: out.primes, limit, rounds, engine:"segmented"};
+      }
+      limit *= 2;
+      if(limit > 2_147_483_000) throw new Error("limit too large for this browser tab");
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+
+  // --------- Prime-vector encoder (PPU-style loop) ---------
+
+  function primeVectorEncode(Q, primes){
+    let q = Q;
+    const exps = [];
+    for(let i=0; i<primes.length && primes[i]*primes[i] <= q; i++){
+      const p = primes[i];
+      if(q % p === 0){
+        let r = 0;
+        while(q % p === 0){
+          q = Math.floor(q / p);
+          r++;
+        }
+        exps.push([p,r]);
+      }
+    }
+    if(q > 1){
+      exps.push([q,1]);
+    }
+    return exps;
+  }
+
+  // --------- BasUni spectral readout ---------
+
+  function basuniLambda(pk, alpha, sReal){
+    const exp = alpha * sReal;
+    const val = Math.exp(-exp * Math.log(pk));
+    return val;
+  }
+
+  // --------- Pole-grid / residue visualization ---------
+
+  const basePrimesForGrid = [2,3,5,7,11,13,17,19,23,29,31];
+  function drawResidueGrid(pk){
+    const W = canvas.width, H = canvas.height;
+    ctx.fillStyle = "#0b0f14";
+    ctx.fillRect(0,0,W,H);
+
+    const pad = 12;
+    const left = 72;
+    const top = 18;
+    const rowH = Math.floor((H - top - pad) / basePrimesForGrid.length);
+    const cols = 32;
+    const colW = Math.floor((W - left - pad) / cols);
+
+    ctx.fillStyle = "rgba(233,242,255,.85)";
+    ctx.font = "12px ui-monospace, Menlo, Consolas, monospace";
+    ctx.fillText("p", 18, 14);
+    ctx.fillText("residue fingerprint of pₖ mod p", left, 14);
+
+    for(let r=0; r<basePrimesForGrid.length; r++){
+      const p = basePrimesForGrid[r];
+      const y = top + r*rowH;
+      ctx.fillStyle = "rgba(233,242,255,.85)";
+      ctx.fillText(String(p).padStart(2," "), 18, y + rowH*0.65);
+
+      const res = pk % p;
+
+      for(let c=0;c<cols;c++){
+        const x = left + c*colW;
+        const isHit = (c % p) === res;
+        ctx.fillStyle = "rgba(255,255,255,.06)";
+        ctx.fillRect(x, y, colW-1, rowH-1);
+        if(isHit){
+          ctx.fillStyle = "rgba(106,228,255,.65)";
+          ctx.fillRect(x, y, colW-1, rowH-1);
+        }
+        if((c % p) === 0){
+          ctx.fillStyle = "rgba(255,255,255,.08)";
+          ctx.fillRect(x, y, 1, rowH-1);
+        }
+      }
+
+      if(res === 0){
+        ctx.fillStyle = "rgba(255,106,106,.85)";
+        ctx.fillText("divisible!", left + cols*colW + 6, y + rowH*0.65);
+      }
+    }
+  }
+
+  // --------- UI wiring ---------
+
+  let lastPrimes = null;
+  let lastPk = null;
+
+  function setBusy(b){
+    $("run").disabled = b;
+    $("stop").disabled = !b;
+    $("encode").disabled = b && !lastPrimes;
+    $("evalLam").disabled = b && lastPk==null;
+  }
+
+  $("stop").addEventListener("click", () => {
+    STOP = true;
+    setStatus("stopping…");
+    log("stop requested");
+  });
+
+  $("run").addEventListener("click", async () => {
+    clearLog();
+    encOut.textContent = "";
+    specOut.textContent = "";
+    pkEl.textContent = "—";
+    timeEl.textContent = "—";
+    workEl.textContent = "—";
+    STOP = false;
+    setBusy(true);
+
+    const k = Math.max(1, Math.floor(Number($("k").value||1)));
+    const mode = $("mode").value;
+
+    setStatus("running");
+    log(`target: k = ${k.toLocaleString()}`);
+    const t0 = now();
+    try{
+      const out = (mode==="segmented") ? await kthPrimeSegmented(k) : await kthPrimeAutoSieve(k);
+      const dt = now() - t0;
+
+      lastPk = out.pk;
+      lastPrimes = out.primes;
+
+      pkEl.textContent = String(out.pk);
+      timeEl.textContent = fmtMs(dt);
+      workEl.textContent = `${out.engine}, limit=${out.limit.toLocaleString()}, rounds=${out.rounds}`;
+
+      setStatus("done");
+      log(`DONE: p_${k} = ${out.pk.toLocaleString()}  (${fmtMs(dt)})`);
+
+      $("Q").value = String(out.pk);
+      renderEncoding(out.pk);
+      renderSpectral(out.pk);
+      drawResidueGrid(out.pk);
+
+    }catch(e){
+      if(String(e.message||e).includes("stopped")){
+        setStatus("stopped");
+        log("stopped by user");
+      }else{
+        setStatus("error");
+        log("ERROR: " + (e.message||String(e)));
+      }
+    }finally{
+      setBusy(false);
+    }
+  });
+
+  function renderEncoding(Q){
+    if(!lastPrimes){
+      encOut.textContent = "Run pₖ first (or any sieve) so we have a prime basis.";
+      return;
+    }
+    const q = Math.max(1, Math.floor(Number(Q)));
+    const exps = primeVectorEncode(q, lastPrimes);
+    const parts = exps.map(([p,r]) => r===1 ? `${p}` : `${p}^${r}`);
+    const isPrime = (exps.length===1 && exps[0][1]===1 && exps[0][0]===q);
+    encOut.textContent = [
+      `Q = ${q.toLocaleString()}`,
+      `factorization (sparse prime-vector):`,
+      `  Q = ${parts.join(" · ")}`,
+      ``,
+      isPrime ? `prime-vector has Hamming-weight 1 → Q is prime` : `composite-vector → Q is composite (or a prime-power / product)`
+    ].join("\n");
+  }
+
+  function renderSpectral(pk){
+    const alpha = Math.max(1, Math.floor(Number($("alpha").value||1)));
+    const sReal = Number($("sreal").value||1);
+    const lam = basuniLambda(pk, alpha, sReal);
+    specOut.textContent = [
+      `Inputs: pₖ=${pk.toLocaleString()}, α=${alpha}, s=${sReal}`,
+      ``,
+      `BasUni-style readout (real-only here):`,
+      `  λₖ = 1 / pₖ^(α·s)`,
+      `     = 1 / ${pk}^(${alpha}·${sReal})`,
+      ``,
+      `λₖ ≈ ${lam.toExponential(8)}`,
+      ``,
+      `Note: for complex s = 1/2 + it (critical line), λₖ becomes complex-valued.`
+    ].join("\n");
+  }
+
+  $("encode").addEventListener("click", () => renderEncoding($("Q").value));
+  $("evalLam").addEventListener("click", () => {
+    if(lastPk==null){ specOut.textContent = "Compute pₖ first."; return; }
+    renderSpectral(lastPk);
+  });
+
+  const known = [
+    [1,2],[2,3],[3,5],[4,7],[5,11],[6,13],[10,29],[25,97],[100,541],[1000,7919],[10000,104729]
+  ];
+  $("tests").textContent = known.map(([k,pk]) => `p_${k} = ${pk}`).join("\n");
+
+  drawResidueGrid(97);
+  setBusy(false);
+})();
+</script>
+</body>
+</html>

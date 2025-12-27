@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="theme-color" content="#0b0b0b"/>
+<title>BasUni BigInt Prime Lab</title>
+<style>
+  :root{color-scheme:dark}
+  html,body{margin:0;height:100%;background:#070707;color:rgba(255,255,255,.92);
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+  *{box-sizing:border-box}
+  .wrap{max-width:1180px;margin:0 auto;padding:14px 12px 44px}
+  h1{margin:0 0 6px;font-size:18px;font-weight:950;letter-spacing:.2px}
+  p{margin:6px 0 0;opacity:.78;line-height:1.35}
+  .grid{display:grid;grid-template-columns:1.05fr .95fr;gap:12px;align-items:start}
+  @media(max-width:980px){.grid{grid-template-columns:1fr}}
+  .card{margin-top:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);
+    border-radius:18px;padding:12px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input,button,select,textarea{
+    appearance:none;border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.35);
+    color:rgba(255,255,255,.92);padding:10px 10px;border-radius:14px;font-weight:850;font-size:13px;outline:none;
+    -webkit-tap-highlight-color:transparent}
+  textarea{width:100%;min-height:130px;font-weight:800;line-height:1.25;border-radius:16px}
+  button{cursor:pointer}
+  button:active{transform:translateY(1px);background:rgba(255,255,255,.08)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .pill{padding:7px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.10);
+    background:rgba(255,255,255,.05);font-size:12px;font-weight:900;opacity:.86;display:flex;gap:8px;align-items:center}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace}
+  .small{font-size:12px;opacity:.78;line-height:1.35}
+  .ok{color:#9dffb0}
+  .warn{color:#ffd37a}
+  .bad{color:#ff9a9a}
+  .log{white-space:pre-wrap;border:1px solid rgba(255,255,255,.10);border-radius:14px;background:rgba(0,0,0,.28);
+       padding:10px;min-height:120px;max-height:300px;overflow:auto}
+  a{color:inherit}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BasUni BigInt Prime Lab</h1>
+  <p>
+    Huge-integer prime testing and prime hunting using native <span class="mono">BigInt</span> (no network).
+    Includes: expression-to-integer, file upload test, prime search, and a downloadable results bundle.
+  </p>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <div class="row">
+          <div class="pill">Expression → candidate</div>
+          <button id="evalBtn">Evaluate</button>
+          <button id="testBtn" disabled>Test primality</button>
+          <button id="saveCandidate" disabled>Save as “best”</button>
+          <div class="pill">MR rounds <input id="rounds" type="number" min="1" max="64" step="1" value="16" style="width:80px"></div>
+        </div>
+        <div class="small" style="margin-top:8px">
+          Supported: <span class="mono">+ - * / % ^ ( )</span> and functions:
+          <span class="mono">pow(a,b)</span>, <span class="mono">gcd(a,b)</span>, <span class="mono">lcm(a,b)</span>,
+          <span class="mono">factorial(n)</span>, <span class="mono">primorial(n)</span>.
+          Examples: <span class="mono">2^521-1</span>, <span class="mono">primorial(10000)+1</span>
+        </div>
+        <textarea id="expr" class="mono" spellcheck="false">2^521 - 1</textarea>
+
+        <div class="card" style="margin-top:10px">
+          <div class="row">
+            <div class="pill">Candidate info</div>
+            <div class="pill">Digits <span id="digits">—</span></div>
+            <div class="pill">Bits <span id="bits">—</span></div>
+            <div class="pill">Status <span id="candStatus">—</span></div>
+          </div>
+          <div class="log mono" id="candOut">—</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <div class="pill">Prime hunter</div>
+          <button id="nextPrimeBtn" disabled>Next prime ≥ candidate</button>
+          <button id="huntBtn" disabled>Hunt for seconds</button>
+          <input id="huntSecs" type="number" min="1" max="600" step="1" value="10" style="width:90px">
+          <button id="stopHunt" disabled>Stop</button>
+        </div>
+        <div class="small" style="margin-top:8px">
+          Starts from the current candidate (rounded up to odd) and scans upward, testing each odd with Miller–Rabin.
+          The “best prime” tracks the largest prime found so far in this session.
+        </div>
+        <div class="card" style="margin-top:10px">
+          <div class="row">
+            <div class="pill">Best prime found</div>
+            <button id="downloadBtn" disabled>Download results JSON</button>
+          </div>
+          <div class="log mono" id="bestOut">—</div>
+          <div class="small" style="margin-top:6px">
+            Download creates a local file and a link (no upload). If you want to “upload to test”, use the file input on the right.
+          </div>
+          <div id="dlArea" class="small" style="margin-top:8px"></div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="row">
+          <div class="pill">Upload a big integer to test</div>
+          <input id="file" type="file" accept=".txt,.json,.dat,.csv"/>
+          <button id="testFile" disabled>Test uploaded</button>
+        </div>
+        <div class="small" style="margin-top:8px">
+          Upload a text file containing an integer (decimal). Whitespace is ignored.
+        </div>
+        <div class="card" style="margin-top:10px">
+          <div class="pill">Upload result</div>
+          <div class="log mono" id="fileOut">—</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="pill">Notes</div>
+        <div class="small" style="margin-top:8px">
+          • For huge numbers, this is a <b>probable-prime</b> test (Miller–Rabin). Increase rounds for higher confidence.<br/>
+          • <span class="mono">factorial</span> and <span class="mono">primorial</span> are bounded to keep your phone from melting.<br/>
+          • If you specifically need a <b>proven</b> primality certificate (ECPP/Pratt), that’s a different beast.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id)=>document.getElementById(id);
+  const exprEl = $("expr");
+  const candOut = $("candOut");
+  const candStatus = $("candStatus");
+  const digitsEl = $("digits");
+  const bitsEl = $("bits");
+  const bestOut = $("bestOut");
+  const dlArea = $("dlArea");
+  const fileOut = $("fileOut");
+
+  let candidate = null;        // BigInt
+  let lastEval = null;         // {expr, valueStr, t, digits, bits}
+  let bestPrime = null;        // BigInt
+  let bestMeta = null;         // metadata
+  let huntAbort = false;
+  let results = { events: [], bestPrime: null };
+
+  function setText(el, s){ el.textContent = s; }
+  function digitsOfBigInt(n){
+    // Convert via toString(10) (BigInt supports it). For massive n this is still okay for UX.
+    const s = n.toString(10);
+    return {s, digits: s[0]==='-' ? s.length-1 : s.length};
+  }
+  function bitLength(n){
+    let x = n < 0n ? -n : n;
+    if(x === 0n) return 0;
+    let bits = 0;
+    while(x > 0n){ x >>= 1n; bits++; }
+    return bits;
+  }
+
+  // ========= Safe expression parser for BigInt =========
+  // Tokens: numbers (decimal, or 0x..), identifiers, operators + - * / % ^, parentheses, commas.
+  function tokenize(s){
+    const out = [];
+    let i=0;
+    const isWS=c=>/\s/.test(c);
+    const isD=c=>/[0-9]/.test(c);
+    const isA=c=>/[A-Za-z_]/.test(c);
+    while(i<s.length){
+      const c=s[i];
+      if(isWS(c)){ i++; continue; }
+      if(isD(c)){
+        let j=i;
+        if(s[i]==='0' && (s[i+1]==='x' || s[i+1]==='X')){
+          j=i+2;
+          while(j<s.length && /[0-9a-fA-F]/.test(s[j])) j++;
+          out.push({t:"num", v:s.slice(i,j)});
+          i=j; continue;
+        }
+        while(j<s.length && isD(s[j])) j++;
+        out.push({t:"num", v:s.slice(i,j)});
+        i=j; continue;
+      }
+      if(isA(c)){
+        let j=i;
+        while(j<s.length && /[A-Za-z0-9_]/.test(s[j])) j++;
+        out.push({t:"id", v:s.slice(i,j)});
+        i=j; continue;
+      }
+      if("+-*/%^(),".includes(c)){
+        out.push({t:"op", v:c});
+        i++; continue;
+      }
+      throw new Error("Unexpected character: " + c);
+    }
+    return out;
+  }
+
+  const prec = {"^":4, "*":3, "/":3, "%":3, "+":2, "-":2};
+  const rightAssoc = {"^": true};
+
+  function toRPN(tokens){
+    const out=[];
+    const stack=[];
+    let prev=null;
+    for(let i=0;i<tokens.length;i++){
+      const tok=tokens[i];
+      if(tok.t==="num"){ out.push(tok); prev=tok; continue; }
+      if(tok.t==="id"){
+        // function or variable (we only allow functions; bare id is error)
+        stack.push(tok);
+        prev=tok; continue;
+      }
+      if(tok.t==="op"){
+        const op=tok.v;
+        if(op==="("){
+          stack.push(tok); prev=tok; continue;
+        }
+        if(op===")"){
+          while(stack.length && stack[stack.length-1].v!=="(") out.push(stack.pop());
+          if(!stack.length) throw new Error("Mismatched parentheses");
+          stack.pop(); // pop "("
+          // if function on top, pop it too
+          if(stack.length && stack[stack.length-1].t==="id") out.push(stack.pop());
+          prev=tok; continue;
+        }
+        if(op===","){
+          while(stack.length && stack[stack.length-1].v!=="(") out.push(stack.pop());
+          if(!stack.length) throw new Error("Misplaced comma");
+          prev=tok; continue;
+        }
+        // unary minus: if '-' and (start or after op/(/comma) => treat as 'u-'
+        if(op==="-" && (!prev || (prev.t==="op" && "+-*/%^,(".includes(prev.v)) )){
+          stack.push({t:"op", v:"u-"});
+          prev=tok; continue;
+        }
+        while(stack.length){
+          const top=stack[stack.length-1];
+          if(top.t==="op" && top.v!=="(" && top.v!=="," && top.v!=="u-"){
+            const pTop=prec[top.v] ?? 0;
+            const pOp=prec[op] ?? 0;
+            if(pTop>pOp || (pTop===pOp && !rightAssoc[op])) out.push(stack.pop());
+            else break;
+          } else if(top.t==="op" && top.v==="u-"){
+            // unary has higher than everything except function calls; pop before binary ops
+            out.push(stack.pop());
+          } else break;
+        }
+        stack.push(tok);
+        prev=tok; continue;
+      }
+      throw new Error("Bad token");
+    }
+    while(stack.length){
+      const t=stack.pop();
+      if(t.v==="(" || t.v===")") throw new Error("Mismatched parentheses");
+      out.push(t);
+    }
+    return out;
+  }
+
+  function bigIntFromLiteral(lit){
+    if(lit.startsWith("0x") || lit.startsWith("0X")) return BigInt(lit);
+    // decimal
+    return BigInt(lit);
+  }
+
+  // bounded helpers
+  const MAX_FACT = 20000;
+  const MAX_PRIMORIAL = 200000; // primes up to n
+  const MAX_POW_EXP = 250000;   // exponent in a^b (b must fit in Number)
+
+  function gcd(a,b){
+    a = a<0n? -a : a;
+    b = b<0n? -b : b;
+    while(b!==0n){ const t=a%b; a=b; b=t; }
+    return a;
+  }
+  function lcm(a,b){
+    if(a===0n || b===0n) return 0n;
+    return (a/gcd(a,b))*b;
+  }
+  function powBig(a, b){
+    if(b<0n) throw new Error("Negative exponent not allowed for integers");
+    if(b>BigInt(MAX_POW_EXP)) throw new Error("Exponent too large (limit "+MAX_POW_EXP+")");
+    let e = Number(b);
+    let r = 1n, x = a;
+    while(e>0){
+      if(e&1) r = r*x;
+      x = x*x;
+      e >>= 1;
+    }
+    return r;
+  }
+  function factorial(n){
+    if(n<0n) throw new Error("factorial: n must be >= 0");
+    if(n>BigInt(MAX_FACT)) throw new Error("factorial too large (limit "+MAX_FACT+")");
+    let r=1n;
+    for(let i=2n;i<=n;i++) r*=i;
+    return r;
+  }
+  function simpleSieve(limit){
+    const n = Math.max(2, limit|0);
+    const isPrime = new Uint8Array(n+1);
+    isPrime.fill(1);
+    isPrime[0]=0; isPrime[1]=0;
+    const r = Math.floor(Math.sqrt(n));
+    for(let p=2;p<=r;p++){
+      if(isPrime[p]){
+        for(let k=p*p;k<=n;k+=p) isPrime[k]=0;
+      }
+    }
+    const primes=[];
+    for(let i=2;i<=n;i++) if(isPrime[i]) primes.push(i);
+    return primes;
+  }
+  function primorial(n){
+    if(n<0n) throw new Error("primorial: n must be >= 0");
+    if(n>BigInt(MAX_PRIMORIAL)) throw new Error("primorial too large (limit "+MAX_PRIMORIAL+")");
+    const N = Number(n);
+    const primes = simpleSieve(N);
+    let r=1n;
+    for(const p of primes) r *= BigInt(p);
+    return r;
+  }
+
+  const FUNCTIONS = {
+    "pow": (a,b)=>powBig(a,b),
+    "gcd": (a,b)=>gcd(a,b),
+    "lcm": (a,b)=>lcm(a,b),
+    "factorial": (n)=>factorial(n),
+    "primorial": (n)=>primorial(n),
+  };
+
+  function evalRPN(rpn){
+    const st=[];
+    for(const tok of rpn){
+      if(tok.t==="num"){ st.push(bigIntFromLiteral(tok.v)); continue; }
+      if(tok.t==="op"){
+        if(tok.v==="u-"){
+          if(st.length<1) throw new Error("unary - missing operand");
+          st.push(-st.pop());
+          continue;
+        }
+        if(st.length<2) throw new Error("operator missing operands: "+tok.v);
+        const b=st.pop(), a=st.pop();
+        switch(tok.v){
+          case "+": st.push(a+b); break;
+          case "-": st.push(a-b); break;
+          case "*": st.push(a*b); break;
+          case "/":
+            if(b===0n) throw new Error("division by zero");
+            st.push(a/b); break;
+          case "%":
+            if(b===0n) throw new Error("mod by zero");
+            st.push(a%b); break;
+          case "^":
+            st.push(powBig(a,b)); break;
+          default: throw new Error("unknown op "+tok.v);
+        }
+        continue;
+      }
+      if(tok.t==="id"){
+        const fn = FUNCTIONS[tok.v];
+        if(!fn) throw new Error("Unknown identifier: "+tok.v+" (only functions are allowed)");
+        // arity by name
+        const arity = (tok.v==="pow"||tok.v==="gcd"||tok.v==="lcm") ? 2 : 1;
+        if(st.length<arity) throw new Error("Function "+tok.v+" missing args");
+        const args = st.splice(st.length-arity, arity);
+        st.push(fn(...args));
+        continue;
+      }
+      throw new Error("bad token in RPN");
+    }
+    if(st.length!==1) throw new Error("expression did not reduce to a single value");
+    return st[0];
+  }
+
+  function evalExprToBigInt(s){
+    const toks = tokenize(s);
+    const rpn = toRPN(toks);
+    return evalRPN(rpn);
+  }
+
+  // ========= Miller–Rabin for BigInt =========
+  const SMALL_PRIMES = [2n,3n,5n,7n,11n,13n,17n,19n,23n,29n,31n,37n,41n,43n,47n,53n,59n,61n,67n,71n,73n,79n,83n,89n,97n];
+
+  function modPow(a, d, n){
+    let r=1n, x=a%n, e=d;
+    while(e>0n){
+      if(e&1n) r=(r*x)%n;
+      x=(x*x)%n;
+      e >>= 1n;
+    }
+    return r;
+  }
+  function isProbablePrimeMR(n, rounds){
+    if(n<2n) return {isPrime:false, reason:"n<2"};
+    for(const p of SMALL_PRIMES){
+      if(n===p) return {isPrime:true, reason:"small prime"};
+      if(n%p===0n) return {isPrime:false, reason:"divisible by "+p.toString()};
+    }
+    // write n-1 = d*2^s
+    let d=n-1n, s=0n;
+    while((d&1n)===0n){ d >>= 1n; s++; }
+
+    function trial(a){
+      let x = modPow(a, d, n);
+      if(x===1n || x===n-1n) return true;
+      for(let r=1n; r<s; r++){
+        x = (x*x)%n;
+        if(x===n-1n) return true;
+      }
+      return false;
+    }
+
+    // deterministic set for < 2^64 (when safe)
+    if(n < (1n<<64n)){
+      const bases=[2n, 325n, 9375n, 28178n, 450775n, 9780504n, 1795265022n];
+      for(const a0 of bases){
+        const a = a0 % n;
+        if(a===0n) continue;
+        if(!trial(a)) return {isPrime:false, reason:"MR witness (64-bit bases)"};
+      }
+      return {isPrime:true, reason:"MR passed (deterministic for <2^64)"};
+    }
+
+    // random bases (or pseudo if crypto missing)
+    const rr = Math.max(1, Math.min(64, rounds|0));
+    const useCrypto = (globalThis.crypto && crypto.getRandomValues);
+    for(let i=0;i<rr;i++){
+      let a;
+      if(useCrypto){
+        // sample 128 bits, mod range
+        const buf = new Uint32Array(4);
+        crypto.getRandomValues(buf);
+        let x = 0n;
+        for(const u of buf) x = (x<<32n) + BigInt(u);
+        a = 2n + (x % (n-3n));
+      } else {
+        // fallback: simple LCG in JS number space
+        const r = Math.floor(Math.random()*1e9);
+        a = 2n + (BigInt(r) % (n-3n));
+      }
+      if(!trial(a)) return {isPrime:false, reason:"MR witness (random base)"};
+    }
+    return {isPrime:true, reason:"MR passed ("+rr+" rounds)"};
+  }
+
+  // ========= UI actions =========
+  function enableAfterEval(ok){
+    $("testBtn").disabled = !ok;
+    $("nextPrimeBtn").disabled = !ok;
+    $("huntBtn").disabled = !ok;
+    $("saveCandidate").disabled = !ok;
+  }
+
+  function recordEvent(type, obj){
+    results.events.push({t:new Date().toISOString(), type, ...obj});
+    // cap
+    if(results.events.length>2000) results.events.splice(0, results.events.length-2000);
+  }
+
+  async function evaluate(){
+    dlArea.innerHTML = "";
+    candStatus.textContent = "…";
+    candOut.textContent = "Evaluating…";
+    enableAfterEval(false);
+
+    const expr = exprEl.value;
+    const t0 = performance.now();
+    try{
+      const v = evalExprToBigInt(expr);
+      const dt = performance.now()-t0;
+      candidate = v;
+
+      const bl = bitLength(v<0n? -v : v);
+      const {s, digits} = digitsOfBigInt(v<0n? -v : v);
+      digitsEl.textContent = String(digits);
+      bitsEl.textContent = String(bl);
+      candStatus.textContent = "ready";
+      candOut.textContent = "value (decimal):\n"+(v.toString())+"\n\n" +
+        "timing: "+dt.toFixed(1)+" ms\n" +
+        "note: large conversions may be slow on big inputs.";
+      lastEval = {expr, value: v.toString(), ms: dt, digits, bits: bl};
+      recordEvent("eval", {expr, ms: dt, digits, bits: bl});
+      enableAfterEval(true);
+    } catch(e){
+      candidate = null;
+      digitsEl.textContent = "—"; bitsEl.textContent = "—";
+      candStatus.textContent = "error";
+      candOut.textContent = "Error: "+(e?.message||String(e));
+      recordEvent("eval_error", {expr, error: (e?.message||String(e))});
+    }
+  }
+
+  function testCandidate(){
+    if(candidate==null) return;
+    candStatus.textContent = "testing…";
+    const rounds = parseInt($("rounds").value,10) || 16;
+    const t0 = performance.now();
+    const n = candidate<0n? -candidate : candidate;
+    const res = isProbablePrimeMR(n, rounds);
+    const dt = performance.now()-t0;
+
+    const tag = res.isPrime ? "PROBABLE PRIME" : "composite";
+    candStatus.textContent = res.isPrime ? "probable-prime" : "composite";
+    candOut.textContent =
+      `candidate: ${candidate.toString()}\n` +
+      `abs(n): ${n.toString()}\n\n` +
+      `result: ${tag}\nreason: ${res.reason}\nMR rounds: ${rounds}\n` +
+      `time: ${dt.toFixed(1)} ms\n\n` +
+      `digits: ${digitsEl.textContent}  bits: ${bitsEl.textContent}`;
+
+    recordEvent("test", {isPrime: res.isPrime, reason: res.reason, rounds, ms: dt, digits: digitsEl.textContent, bits: bitsEl.textContent});
+
+    // if prime and larger, update best automatically (optional)
+    if(res.isPrime){
+      if(bestPrime==null || n > bestPrime){
+        bestPrime = n;
+        bestMeta = {expr: exprEl.value, rounds, reason: res.reason, testedMs: dt, ts: new Date().toISOString()};
+        updateBest();
+      }
+    }
+  }
+
+  function updateBest(){
+    if(bestPrime==null){
+      bestOut.textContent = "—";
+      $("downloadBtn").disabled = true;
+      results.bestPrime = null;
+      return;
+    }
+    const {digits} = digitsOfBigInt(bestPrime);
+    const bl = bitLength(bestPrime);
+    bestOut.textContent =
+      `bestPrime = ${bestPrime.toString()}\n` +
+      `digits=${digits}  bits=${bl}\n` +
+      `sourceExpr=${bestMeta?.expr ?? "—"}\n` +
+      `MR rounds=${bestMeta?.rounds ?? "—"}  note=${bestMeta?.reason ?? "—"}\n` +
+      `timestamp=${bestMeta?.ts ?? "—"}`;
+    $("downloadBtn").disabled = false;
+    results.bestPrime = {value: bestPrime.toString(), digits, bits: bl, meta: bestMeta};
+  }
+
+  function saveCandidateAsBest(){
+    if(candidate==null) return;
+    const n = candidate<0n? -candidate : candidate;
+    bestPrime = n;
+    bestMeta = {expr: exprEl.value, rounds: null, reason: "saved manually (not tested)", testedMs: null, ts: new Date().toISOString()};
+    recordEvent("save_best", {value: n.toString(), expr: exprEl.value});
+    updateBest();
+  }
+
+  async function nextPrimeFromCandidate(){
+    if(candidate==null) return;
+    huntAbort = false;
+    $("nextPrimeBtn").disabled = true;
+    $("huntBtn").disabled = true;
+    $("stopHunt").disabled = false;
+
+    const rounds = parseInt($("rounds").value,10) || 16;
+    let n = candidate<0n? -candidate : candidate;
+    if(n<=2n){
+      bestPrime = 2n;
+      bestMeta = {expr: exprEl.value, rounds, reason:"trivial", testedMs:0, ts:new Date().toISOString()};
+      updateBest();
+      $("nextPrimeBtn").disabled = false;
+      $("huntBtn").disabled = false;
+      $("stopHunt").disabled = true;
+      return;
+    }
+    if((n&1n)===0n) n += 1n;
+
+    const t0 = performance.now();
+    let tested=0;
+    while(true){
+      if(huntAbort) break;
+      const res = isProbablePrimeMR(n, rounds);
+      tested++;
+      if(res.isPrime){
+        const dt = performance.now()-t0;
+        bestPrime = n;
+        bestMeta = {expr: `nextPrime(>=${candidate.toString()})`, rounds, reason: res.reason, testedMs: dt, ts: new Date().toISOString(), testedCandidates: tested};
+        recordEvent("nextPrime_found", {value:n.toString(), rounds, testedCandidates: tested, ms: dt});
+        updateBest();
+        break;
+      }
+      n += 2n;
+      if(tested % 64 === 0){
+        candStatus.textContent = "hunting…";
+        candOut.textContent = `Searching…\ncurrent=${n.toString()}\ntrials=${tested}\nMR rounds=${rounds}`;
+        await new Promise(r=>setTimeout(r,0));
+      }
+    }
+
+    $("nextPrimeBtn").disabled = false;
+    $("huntBtn").disabled = false;
+    $("stopHunt").disabled = true;
+    if(huntAbort){
+      recordEvent("hunt_aborted", {kind:"nextPrime", testedCandidates: tested});
+      candStatus.textContent = "stopped";
+    } else {
+      candStatus.textContent = "ready";
+    }
+  }
+
+  async function huntForSeconds(){
+    if(candidate==null) return;
+    huntAbort = false;
+    $("nextPrimeBtn").disabled = true;
+    $("huntBtn").disabled = true;
+    $("stopHunt").disabled = false;
+
+    const rounds = parseInt($("rounds").value,10) || 16;
+    const secs = Math.max(1, Math.min(600, parseInt($("huntSecs").value,10)||10));
+    let n = candidate<0n? -candidate : candidate;
+    if(n<=2n) n=3n;
+    if((n&1n)===0n) n += 1n;
+
+    const t0 = performance.now();
+    let tested=0, found=0;
+    let localBest = bestPrime;
+
+    while(true){
+      if(huntAbort) break;
+      const dt = (performance.now()-t0)/1000;
+      if(dt >= secs) break;
+
+      const res = isProbablePrimeMR(n, rounds);
+      tested++;
+      if(res.isPrime){
+        found++;
+        if(localBest==null || n>localBest){
+          localBest = n;
+          bestPrime = n;
+          bestMeta = {expr: `hunt(${secs}s) start>=${candidate.toString()}`, rounds, reason: res.reason, testedMs: performance.now()-t0, ts: new Date().toISOString(), testedCandidates: tested, found};
+          updateBest();
+          recordEvent("hunt_found", {value:n.toString(), rounds, testedCandidates: tested, found, t: dt});
+        }
+      }
+      n += 2n;
+      if(tested % 128 === 0){
+        candStatus.textContent = "hunting…";
+        candOut.textContent = `Hunting for ${secs}s…\ncurrent=${n.toString()}\ntrials=${tested}\nfound=${found}\nMR rounds=${rounds}\nelapsed=${dt.toFixed(2)}s`;
+        await new Promise(r=>setTimeout(r,0));
+      }
+    }
+
+    recordEvent("hunt_done", {secs, testedCandidates: tested, found});
+    $("nextPrimeBtn").disabled = false;
+    $("huntBtn").disabled = false;
+    $("stopHunt").disabled = true;
+    candStatus.textContent = huntAbort ? "stopped" : "ready";
+  }
+
+  function downloadResults(){
+    // include last candidate and last eval
+    const payload = {
+      created: new Date().toISOString(),
+      lastEval,
+      candidate: candidate==null ? null : candidate.toString(),
+      bestPrime: results.bestPrime,
+      events: results.events
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "basuni_prime_lab_results.json";
+    a.textContent = "Download basuni_prime_lab_results.json";
+    a.className = "mono";
+    dlArea.innerHTML = "";
+    dlArea.appendChild(a);
+    dlArea.appendChild(document.createTextNode(" (tap to save)"));
+    // also trigger immediate download
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+  }
+
+  // ========= Upload test =========
+  let uploadedN = null;
+  $("file").addEventListener("change", async () => {
+    const f = $("file").files?.[0];
+    uploadedN = null;
+    $("testFile").disabled = true;
+    if(!f){ fileOut.textContent="—"; return; }
+    const txt = await f.text();
+    const cleaned = txt.replace(/[\s,]/g,"").trim();
+    try{
+      if(!cleaned || !/^[+-]?\d+$/.test(cleaned)) throw new Error("File must contain a decimal integer.");
+      uploadedN = BigInt(cleaned);
+      const nAbs = uploadedN<0n? -uploadedN : uploadedN;
+      const d = digitsOfBigInt(nAbs).digits;
+      const b = bitLength(nAbs);
+      fileOut.textContent = `loaded: ${uploadedN.toString()}\n(digits=${d}, bits=${b})\nready to test.`;
+      $("testFile").disabled = false;
+    } catch(e){
+      fileOut.textContent = "Error: " + (e?.message||String(e));
+    }
+  });
+
+  $("testFile").addEventListener("click", () => {
+    if(uploadedN==null) return;
+    const rounds = parseInt($("rounds").value,10) || 16;
+    const t0 = performance.now();
+    const n = uploadedN<0n? -uploadedN : uploadedN;
+    const res = isProbablePrimeMR(n, rounds);
+    const dt = performance.now()-t0;
+    fileOut.textContent =
+      `uploaded n: ${uploadedN.toString()}\n` +
+      `abs(n): ${n.toString()}\n\n` +
+      `result: ${res.isPrime ? "PROBABLE PRIME" : "composite"}\n` +
+      `reason: ${res.reason}\nMR rounds: ${rounds}\n` +
+      `time: ${dt.toFixed(1)} ms`;
+
+    recordEvent("file_test", {isPrime: res.isPrime, reason: res.reason, rounds, ms: dt});
+    if(res.isPrime && (bestPrime==null || n>bestPrime)){
+      bestPrime = n;
+      bestMeta = {expr: "uploaded file", rounds, reason: res.reason, testedMs: dt, ts: new Date().toISOString()};
+      updateBest();
+    }
+  });
+
+  // ========= Wire buttons =========
+  $("evalBtn").addEventListener("click", evaluate);
+  $("testBtn").addEventListener("click", testCandidate);
+  $("saveCandidate").addEventListener("click", saveCandidateAsBest);
+  $("nextPrimeBtn").addEventListener("click", nextPrimeFromCandidate);
+  $("huntBtn").addEventListener("click", huntForSeconds);
+  $("stopHunt").addEventListener("click", () => { huntAbort = true; });
+  $("downloadBtn").addEventListener("click", downloadResults);
+
+  // init
+  setText(bestOut, "—");
+  setText(candOut, "—");
+  enableAfterEval(false);
+  $("testFile").disabled = true;
+})();
+</script>
+</body>
+</html>
