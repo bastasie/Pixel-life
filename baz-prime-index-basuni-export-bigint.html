@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <meta name="theme-color" content="#0b0f14" />
+  <title>BasUni Prime Index Lab — Export + BigInt (k → pₖ)</title>
+  <style>
+    :root{--bg:#0b0f14;--muted:#9fb0c3;--text:#e9f2ff;--accent:#6ae4ff;--ok:#4dff88;--warn:#ffdf6a;--bad:#ff6a6a;}
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;background:var(--bg);color:var(--text);}
+    .wrap{max-width:1180px;margin:0 auto;padding:16px;}
+    h1{margin:8px 0 4px;font-size:20px;font-weight:800;letter-spacing:.2px}
+    .sub{color:var(--muted);margin:0 0 14px;font-size:13px;line-height:1.35}
+    .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:12px}
+    @media (max-width: 980px){.grid{grid-template-columns:1fr}}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:14px;box-shadow:0 14px 40px rgba(0,0,0,.35)}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+    label{font-size:12px;color:var(--muted)}
+    input,button,select,textarea{
+      border-radius:12px;border:1px solid rgba(255,255,255,.12);
+      background:rgba(0,0,0,.25);color:var(--text);padding:10px 12px;font-size:14px;
+      outline:none;
+    }
+    input::placeholder,textarea::placeholder{color:rgba(159,176,195,.65)}
+    button{cursor:pointer;background:rgba(106,228,255,.10);border-color:rgba(106,228,255,.35)}
+    button:hover{background:rgba(106,228,255,.14)}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    .pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:6px 10px;font-size:12px;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.18);color:var(--muted)}
+    .pill b{color:var(--text);font-weight:750}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+    .hr{height:1px;background:rgba(255,255,255,.08);margin:12px 0}
+    .small{font-size:12px;color:var(--muted);line-height:1.45}
+    .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+    @media (max-width: 700px){.kpi{grid-template-columns:1fr}}
+    .kpi .box{border-radius:14px;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.18);padding:10px}
+    .kpi .t{font-size:12px;color:var(--muted);margin:0 0 4px}
+    .kpi .v{font-size:15px;font-weight:820;margin:0}
+    .log{height:220px;overflow:auto;border-radius:14px;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.16);padding:10px;font-size:12px;color:#cfe0ff}
+    .log .dim{color:rgba(233,242,255,.6)}
+    canvas{width:100%;height:auto;border-radius:14px;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.18)}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    @media (max-width: 980px){.two{grid-template-columns:1fr}}
+    .hint{color:var(--muted);font-size:12px;margin-top:6px}
+    .footer{margin-top:14px;color:rgba(159,176,195,.75);font-size:12px}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    @media (max-width: 980px){.grid2{grid-template-columns:1fr}}
+    .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BasUni Prime Index Lab — Export + BigInt</h1>
+  <p class="sub">
+    Exact <span class="mono">k → pₖ</span> with a BasUni-style readout on top. Adds downloads, “long long” (u64/s64) views, and BigInt support for large integers.
+    Prime-index computation still uses sieve-based exactness (k is a normal integer index).
+  </p>
+
+  <div class="grid">
+    <div class="card">
+      <div class="row">
+        <div>
+          <label for="k">Prime index k (1-indexed)</label><br/>
+          <input id="k" type="number" min="1" step="1" value="10000" />
+          <div class="hint">k is a loop counter → keep it within a few million on phone.</div>
+        </div>
+        <div>
+          <label for="mode">Engine</label><br/>
+          <select id="mode">
+            <option value="autosieve">Auto Sieve (doubling bound)</option>
+            <option value="segmented" selected>Segmented Sieve (streaming)</option>
+          </select>
+          <div class="hint">Both are exact; segmented is usually lighter on RAM.</div>
+        </div>
+        <div>
+          <label>&nbsp;</label><br/>
+          <button id="run">Compute pₖ</button>
+        </div>
+        <div>
+          <label>&nbsp;</label><br/>
+          <button id="stop" disabled>Stop</button>
+        </div>
+        <span class="pill"><b>Status</b> <span id="status">idle</span></span>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="kpi">
+        <div class="box">
+          <p class="t">pₖ</p>
+          <p class="v mono" id="pk">—</p>
+        </div>
+        <div class="box">
+          <p class="t">Time</p>
+          <p class="v mono" id="time">—</p>
+        </div>
+        <div class="box">
+          <p class="t">Largest prime built</p>
+          <p class="v mono" id="pmax">—</p>
+        </div>
+        <div class="box">
+          <p class="t">Work</p>
+          <p class="v mono" id="work">—</p>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="row">
+        <button id="dlReport" disabled>Download report (JSON)</button>
+        <button id="dlLargest" disabled>Download largest prime (TXT)</button>
+        <button id="dlPrimes" disabled>Download primes list (TXT)</button>
+        <div>
+          <label for="exportN">Export how many primes</label><br/>
+          <input id="exportN" type="number" min="10" step="10" value="20000" style="width:150px" />
+        </div>
+        <span class="pill"><b>Note</b> <span class="mono">primes list</span> can get huge fast</span>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="two">
+        <div>
+          <label>PPU-style prime-vector encoding (BigInt-safe)</label>
+          <div class="hint">Encode Q (decimal) into sparse prime-exponent vector using the current sieve basis.</div>
+          <div class="row" style="margin-top:8px">
+            <input id="Q" type="text" class="mono" placeholder="Enter integer Q (decimal), e.g. 9973 or 12345678901234567890" style="flex:1" />
+            <button id="encode" disabled>Encode</button>
+          </div>
+          <div class="log mono" id="encOut" aria-label="prime-vector output"></div>
+        </div>
+        <div>
+          <label>BasUni spectral readout</label>
+          <div class="hint">Given exact pₖ, compute derived λₖ (real-only) and show u64/s64 views (“long long”).</div>
+          <div class="row" style="margin-top:8px">
+            <div>
+              <label for="alpha">α</label><br/>
+              <input id="alpha" type="number" value="1" step="1" min="1" />
+            </div>
+            <div>
+              <label for="sreal">s (real)</label><br/>
+              <input id="sreal" type="number" value="1" step="0.1" />
+            </div>
+            <div>
+              <label>&nbsp;</label><br/>
+              <button id="evalLam" disabled>Compute λ</button>
+            </div>
+          </div>
+          <div class="log mono" id="specOut" aria-label="spectral output"></div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="grid2">
+        <div>
+          <label>u64 / s64 (“long long”) tools</label>
+          <div class="hint">Treat a BigInt as unsigned/signed 64-bit and show common bases.</div>
+          <div class="row" style="margin-top:8px">
+            <input id="llIn" type="text" class="mono" placeholder="Enter integer (decimal or 0x...)" style="flex:1" />
+            <button id="llGo">Convert</button>
+          </div>
+          <div class="log mono" id="llOut"></div>
+        </div>
+        <div>
+          <label>Residue “fingerprint” of pₖ through small primes</label>
+          <div class="hint">Software pole-bank projection: residues of pₖ mod p across columns.</div>
+          <canvas id="gridCanvas" width="900" height="260"></canvas>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+      <label>Engine log</label>
+      <div class="log mono" id="log"></div>
+
+      <div class="footer">
+        Single-file, offline. BigInt is built-in on modern Chrome; no external libraries needed.
+      </div>
+    </div>
+
+    <div class="card">
+      <h1 style="font-size:16px;margin-top:0">What you asked for (implemented)</h1>
+      <p class="small">
+        <b>Downloads:</b> report JSON, largest prime, and (optionally truncated) primes list.
+      </p>
+      <p class="small">
+        <b>“long long”:</b> u64/s64 conversions using BigInt masking/sign extension.
+      </p>
+      <p class="small">
+        <b>Large-number “library”:</b> native JS <span class="mono">BigInt</span> is arbitrary precision and exact. This app uses BigInt for parsing/formatting and factor encoding.
+      </p>
+
+      <div class="hr"></div>
+
+      <h1 style="font-size:16px;margin-top:0">Reality</h1>
+      <p class="small">
+        A true “predict primes without computation” device is a different claim. Here you still get an <b>exact</b> k-th prime and then BasUni/PPU-aligned projections and encodings on top.
+      </p>
+
+      <div class="hr"></div>
+      <h1 style="font-size:16px;margin-top:0">Quick tests</h1>
+      <div class="small mono" id="tests"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id)=>document.getElementById(id);
+
+  const logEl = $("log");
+  const statusEl = $("status");
+  const pkEl = $("pk");
+  const pmaxEl = $("pmax");
+  const timeEl = $("time");
+  const workEl = $("work");
+  const encOut = $("encOut");
+  const specOut = $("specOut");
+  const llOut = $("llOut");
+
+  const canvas = $("gridCanvas");
+  const ctx = canvas.getContext("2d", { alpha: false });
+
+  let STOP = false;
+
+  // State for exports
+  let last = {
+    k: null,
+    pk: null,            // Number
+    pkBig: null,         // BigInt
+    primes: null,        // Array<number>
+    engine: null,
+    limit: null,
+    rounds: null,
+    elapsedMs: null,
+    pmax: null,          // Number
+    checksum32: null
+  };
+
+  function now(){ return performance.now(); }
+  function setStatus(s){ statusEl.textContent = s; }
+  function log(msg, dim=false){
+    const div = document.createElement("div");
+    if(dim) div.className = "dim";
+    div.textContent = msg;
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function clearLog(){ logEl.textContent = ""; }
+
+  function fmtMs(ms){
+    if(!isFinite(ms)) return "—";
+    if(ms < 1000) return ms.toFixed(1)+" ms";
+    return (ms/1000).toFixed(3)+" s";
+  }
+
+  // ---------- BigInt helpers (“long long”) ----------
+  const U64_MASK = (1n<<64n) - 1n;
+  function parseBigIntAuto(s){
+    const t = (s||"").trim();
+    if(!t) throw new Error("empty");
+    if(/^[-+]?0x[0-9a-f]+$/i.test(t)) return BigInt(t);
+    if(/^[-+]?\d+$/.test(t)) return BigInt(t);
+    throw new Error("invalid integer format");
+  }
+  function asU64(x){ return x & U64_MASK; }
+  function asS64(x){
+    const u = asU64(x);
+    return (u & (1n<<63n)) ? (u - (1n<<64n)) : u;
+  }
+  function hex64(u){
+    return "0x" + asU64(u).toString(16).padStart(16,"0");
+  }
+
+  function u64Panel(x){
+    const u = asU64(x);
+    const s = asS64(x);
+    return [
+      `input: ${x.toString()}`,
+      ``,
+      `u64: ${u.toString()}`,
+      `u64 hex: ${hex64(u)}`,
+      `s64: ${s.toString()}`,
+      `s64 hex (u-view): ${hex64(s)}`
+    ].join("\n");
+  }
+
+  $("llGo").onclick = () => {
+    try{
+      const x = parseBigIntAuto($("llIn").value);
+      llOut.textContent = u64Panel(x);
+    }catch(e){
+      llOut.textContent = "error: " + (e.message||String(e));
+    }
+  };
+
+  // ---------- Sieve engines (exact) ----------
+
+  function simpleSieve(limit){
+    const isPrime = new Uint8Array(limit + 1);
+    isPrime.fill(1, 2);
+    const r = Math.floor(Math.sqrt(limit));
+    for(let p=2; p<=r; p++){
+      if(isPrime[p]){
+        for(let m=p*p; m<=limit; m+=p) isPrime[m]=0;
+      }
+    }
+    const primes = [];
+    for(let i=2;i<=limit;i++) if(isPrime[i]) primes.push(i);
+    return primes;
+  }
+
+  function segmentedSieve(limit, chunkSize=1<<20){
+    const r = Math.floor(Math.sqrt(limit));
+    const basePrimes = simpleSieve(r);
+    const primes = basePrimes.slice();
+
+    let low = r + 1;
+    while(low <= limit){
+      if(STOP) return {primes, stopped:true, limitDone: low-1};
+      const high = Math.min(limit, low + chunkSize - 1);
+      const size = high - low + 1;
+      const mark = new Uint8Array(size); // 0 prime, 1 composite
+
+      for(const p of basePrimes){
+        const start = Math.max(p*p, Math.ceil(low/p)*p);
+        for(let m=start; m<=high; m+=p) mark[m-low] = 1;
+      }
+      for(let i=0;i<size;i++) if(mark[i]===0) primes.push(low+i);
+
+      low = high + 1;
+    }
+    return {primes, stopped:false, limitDone: limit};
+  }
+
+  function checksum32(arr){
+    let x = 0x12345678>>>0;
+    for(let i=0;i<arr.length;i++){
+      x ^= (arr[i] + 0x9e3779b9 + ((x<<6)>>>0) + (x>>>2))>>>0;
+      x = (x>>>0);
+    }
+    return x>>>0;
+  }
+
+  async function kthPrimeAutoSieve(k){
+    let limit = (k > 1000) ? (1<<20) : 1024;
+    let rounds = 0;
+    while(true){
+      if(STOP) throw new Error("stopped");
+      rounds++;
+      log(`sieve round ${rounds}: limit = ${limit.toLocaleString()}`);
+      const t0 = now();
+      const primes = simpleSieve(limit);
+      const dt = now()-t0;
+      log(`  found π(${limit.toLocaleString()}) = ${primes.length.toLocaleString()} primes in ${fmtMs(dt)}`, true);
+      if(primes.length >= k){
+        return {pk: primes[k-1], primes, limit, rounds, engine:"autosieve"};
+      }
+      limit *= 2;
+      if(limit > 2_147_483_000) throw new Error("limit too large for this browser tab");
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+
+  async function kthPrimeSegmented(k){
+    let limit = (k <= 10000) ? (1<<18) : (1<<20);
+    let rounds = 0;
+    while(true){
+      if(STOP) throw new Error("stopped");
+      rounds++;
+      log(`segmented round ${rounds}: limit = ${limit.toLocaleString()}`);
+      const t0 = now();
+      const out = segmentedSieve(limit, 1<<19);
+      const dt = now()-t0;
+      log(`  built primes up to ${out.limitDone.toLocaleString()} in ${fmtMs(dt)} (count=${out.primes.length.toLocaleString()})`, true);
+      if(out.primes.length >= k){
+        return {pk: out.primes[k-1], primes: out.primes, limit, rounds, engine:"segmented"};
+      }
+      limit *= 2;
+      if(limit > 2_147_483_000) throw new Error("limit too large for this browser tab");
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+
+  // ---------- Prime-vector encoder (BigInt-safe) ----------
+  function primeVectorEncodeBig(Qbig, primes){
+    let q = Qbig;
+    const exps = [];
+    for(let i=0; i<primes.length; i++){
+      const p = BigInt(primes[i]);
+      if(p*p > q) break;
+      if(q % p === 0n){
+        let r = 0;
+        while(q % p === 0n){
+          q /= p;
+          r++;
+        }
+        exps.push([p, r]);
+      }
+    }
+    if(q > 1n) exps.push([q, 1]);
+    return exps;
+  }
+
+  function renderEncoding(){
+    if(!last.primes){
+      encOut.textContent = "Compute pₖ first so we have a prime basis.";
+      return;
+    }
+    let q;
+    try{
+      q = parseBigIntAuto($("Q").value);
+    }catch(e){
+      encOut.textContent = "error: " + (e.message||String(e));
+      return;
+    }
+    if(q < 1n){ encOut.textContent = "Q must be >= 1"; return; }
+
+    const exps = primeVectorEncodeBig(q, last.primes);
+    const parts = exps.map(([p,r]) => r===1 ? `${p}` : `${p}^${r}`);
+    const isPrime = (exps.length===1 && exps[0][1]===1 && exps[0][0]===q);
+
+    const maxP = last.primes[last.primes.length-1];
+    encOut.textContent = [
+      `Q = ${q.toString()}`,
+      `basis max prime ≈ ${maxP}`,
+      ``,
+      `factorization (sparse prime-vector w.r.t. basis):`,
+      `  Q = ${parts.join(" · ")}`,
+      ``,
+      isPrime ? `prime-vector has Hamming-weight 1 → Q is prime` :
+        `If the remaining factor is > basis max prime, it may still be composite (needs more primes).`
+    ].join("\n");
+  }
+
+  // ---------- BasUni spectral readout + long long views ----------
+  function basuniLambdaReal(pkNumber, alpha, sReal){
+    return Math.exp(-(alpha*sReal) * Math.log(pkNumber));
+  }
+  function renderSpectral(){
+    if(last.pk == null){
+      specOut.textContent = "Compute pₖ first.";
+      return;
+    }
+    const alpha = Math.max(1, Math.floor(Number($("alpha").value||1)));
+    const sReal = Number($("sreal").value||1);
+    const lam = basuniLambdaReal(last.pk, alpha, sReal);
+
+    const pkB = last.pkBig ?? BigInt(last.pk);
+    const u = asU64(pkB);
+    const s = asS64(pkB);
+
+    specOut.textContent = [
+      `pₖ = ${pkB.toString()}`,
+      ``,
+      `BasUni-style readout (real-only here):`,
+      `  λₖ = 1 / pₖ^(α·s)`,
+      `  α=${alpha}, s=${sReal}`,
+      `  λₖ ≈ ${lam.toExponential(10)}`,
+      ``,
+      `long long views:`,
+      `  u64(pₖ) = ${u.toString()}  (${hex64(u)})`,
+      `  s64(pₖ) = ${s.toString()}`
+    ].join("\n");
+  }
+
+  // ---------- Residue fingerprint ----------
+  const basePrimesForGrid = [2,3,5,7,11,13,17,19,23,29,31];
+  function drawResidueGrid(pk){
+    const W = canvas.width, H = canvas.height;
+    ctx.fillStyle = "#0b0f14";
+    ctx.fillRect(0,0,W,H);
+
+    const pad = 12;
+    const left = 72;
+    const top = 18;
+    const rowH = Math.floor((H - top - pad) / basePrimesForGrid.length);
+    const cols = 32;
+    const colW = Math.floor((W - left - pad) / cols);
+
+    ctx.fillStyle = "rgba(233,242,255,.85)";
+    ctx.font = "12px ui-monospace, Menlo, Consolas, monospace";
+    ctx.fillText("p", 18, 14);
+    ctx.fillText("residue fingerprint of pₖ mod p", left, 14);
+
+    for(let r=0; r<basePrimesForGrid.length; r++){
+      const p = basePrimesForGrid[r];
+      const y = top + r*rowH;
+      ctx.fillStyle = "rgba(233,242,255,.85)";
+      ctx.fillText(String(p).padStart(2," "), 18, y + rowH*0.65);
+
+      const res = pk % p;
+
+      for(let c=0;c<cols;c++){
+        const x = left + c*colW;
+        const isHit = (c % p) === res;
+        ctx.fillStyle = "rgba(255,255,255,.06)";
+        ctx.fillRect(x, y, colW-1, rowH-1);
+        if(isHit){
+          ctx.fillStyle = "rgba(106,228,255,.65)";
+          ctx.fillRect(x, y, colW-1, rowH-1);
+        }
+        if((c % p) === 0){
+          ctx.fillStyle = "rgba(255,255,255,.08)";
+          ctx.fillRect(x, y, 1, rowH-1);
+        }
+      }
+      if(res === 0){
+        ctx.fillStyle = "rgba(255,106,106,.85)";
+        ctx.fillText("divisible!", left + cols*colW + 6, y + rowH*0.65);
+      }
+    }
+  }
+
+  // ---------- Downloads ----------
+  function downloadBlob(name, mime, text){
+    const blob = new Blob([text], {type:mime});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 1500);
+  }
+
+  function enableDownloads(on){
+    $("dlReport").disabled = !on;
+    $("dlLargest").disabled = !on;
+    $("dlPrimes").disabled = !on;
+  }
+
+  $("dlReport").onclick = () => {
+    if(last.pk == null) return;
+    const exportN = Math.max(10, Math.floor(Number($("exportN").value||20000)));
+    const primes = last.primes ? last.primes.slice(0, Math.min(exportN, last.primes.length)) : [];
+    const payload = {
+      meta:{
+        created:new Date().toISOString(),
+        ua:navigator.userAgent,
+        engine:last.engine,
+        k:last.k,
+        limit:last.limit,
+        rounds:last.rounds,
+        elapsedMs:last.elapsedMs,
+        primesCount:last.primes ? last.primes.length : 0,
+        exportN,
+        checksum32:last.checksum32
+      },
+      result:{
+        pk:last.pkBig.toString(),
+        pk_u64: asU64(last.pkBig).toString(),
+        pk_u64_hex: hex64(last.pkBig),
+        pk_s64: asS64(last.pkBig).toString(),
+        largestPrimeBuilt: BigInt(last.pmax ?? 0).toString()
+      },
+      primesPreview: primes.map(String)
+    };
+    downloadBlob(`basuni_prime_report_k${last.k}.json`, "application/json", JSON.stringify(payload,null,2));
+  };
+
+  $("dlLargest").onclick = () => {
+    if(last.pmax == null) return;
+    downloadBlob(`largest_prime_built_k${last.k}.txt`, "text/plain",
+      `largestPrimeBuilt=${last.pmax}\nhex=${"0x"+BigInt(last.pmax).toString(16)}\n`);
+  };
+
+  $("dlPrimes").onclick = () => {
+    if(!last.primes) return;
+    const exportN = Math.max(10, Math.floor(Number($("exportN").value||20000)));
+    const n = Math.min(exportN, last.primes.length);
+    const lines = last.primes.slice(0,n).join("\n") + "\n";
+    downloadBlob(`primes_first_${n}_k${last.k}.txt`, "text/plain", lines);
+  };
+
+  // ---------- UI wiring ----------
+  function setBusy(b){
+    $("run").disabled = b;
+    $("stop").disabled = !b;
+    $("encode").disabled = b || !last.primes;
+    $("evalLam").disabled = b || (last.pk == null);
+  }
+
+  $("stop").onclick = () => {
+    STOP = true;
+    setStatus("stopping…");
+    log("stop requested");
+  };
+
+  $("run").onclick = async () => {
+    clearLog();
+    encOut.textContent = "";
+    specOut.textContent = "";
+    pkEl.textContent = "—";
+    timeEl.textContent = "—";
+    workEl.textContent = "—";
+    pmaxEl.textContent = "—";
+    enableDownloads(false);
+
+    STOP = false;
+    setBusy(true);
+
+    const k = Math.max(1, Math.floor(Number($("k").value||1)));
+    const mode = $("mode").value;
+
+    setStatus("running");
+    log(`target: k = ${k.toLocaleString()}`);
+
+    const t0 = now();
+    try{
+      const out = (mode==="segmented") ? await kthPrimeSegmented(k) : await kthPrimeAutoSieve(k);
+      const dt = now() - t0;
+
+      const pmax = out.primes[out.primes.length-1];
+      const c32 = checksum32(out.primes);
+
+      last = {
+        k,
+        pk: out.pk,
+        pkBig: BigInt(out.pk),
+        primes: out.primes,
+        engine: out.engine,
+        limit: out.limit,
+        rounds: out.rounds,
+        elapsedMs: dt,
+        pmax,
+        checksum32: c32
+      };
+
+      pkEl.textContent = last.pkBig.toString();
+      pmaxEl.textContent = `${pmax}  (${("0x"+BigInt(pmax).toString(16))})`;
+      timeEl.textContent = fmtMs(dt);
+      workEl.textContent = `${out.engine}, limit=${out.limit.toLocaleString()}, rounds=${out.rounds}, π(limit)=${out.primes.length.toLocaleString()}`;
+
+      setStatus("done");
+      log(`DONE: p_${k} = ${out.pk.toLocaleString()}  (${fmtMs(dt)})`);
+      log(`largest prime built = ${pmax.toLocaleString()}  checksum32=0x${c32.toString(16).padStart(8,"0")}`, true);
+
+      $("Q").value = last.pkBig.toString();
+      renderEncoding();
+      renderSpectral();
+      drawResidueGrid(out.pk);
+
+      enableDownloads(true);
+      setBusy(false);
+    }catch(e){
+      if(String(e.message||e).includes("stopped")){
+        setStatus("stopped");
+        log("stopped by user");
+      }else{
+        setStatus("error");
+        log("ERROR: " + (e.message||String(e)));
+      }
+      setBusy(false);
+    }
+  };
+
+  $("encode").onclick = renderEncoding;
+  $("evalLam").onclick = renderSpectral;
+
+  // tests
+  const known = [
+    [1,2],[2,3],[3,5],[4,7],[5,11],[6,13],[10,29],[25,97],[100,541],[1000,7919],[10000,104729]
+  ];
+  $("tests").textContent = known.map(([k,pk]) => `p_${k} = ${pk}`).join("\n");
+
+  // init
+  drawResidueGrid(97);
+  llOut.textContent = "Enter a number above and hit Convert.";
+  setBusy(false);
+  enableDownloads(false);
+})();
+</script>
+</body>
+</html>
